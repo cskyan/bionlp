@@ -10,20 +10,85 @@
 #
 
 import os
+import sys
+import subprocess
+from collections import OrderedDict
 
 import pandas as pd
 
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.preprocessing import MultiLabelBinarizer
 
+from .. import nlp
 from ..util import io
 from ..util import fs
+from ..util import oo
+
+if sys.platform.startswith('win32'):
+	DATA_PATH = 'D:\data\ontolib\store'
+elif sys.platform.startswith('linux2'):
+	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'ontolib', 'store')
+	
+
+class Wrapper():
+	@staticmethod
+	def start_service(srv=(True, True)):
+		if (srv[0]):
+			subprocess.call('skrmedpostctl start', shell=True)
+		if (srv[1]):
+			subprocess.call('wsdserverctl start', shell=True)
+		
+	@staticmethod
+	def restart_service(srv=(True, True)):
+		if (srv[0]):
+			subprocess.call('skrmedpostctl restart', shell=True)
+		if (srv[1]):
+			subprocess.call('wsdserverctl restart', shell=True)
+		
+	@staticmethod
+	def stop_service(srv=(True, True)):
+		if (srv[0]):
+			subprocess.call('skrmedpostctl stop', shell=True)
+		if (srv[1]):
+			subprocess.call('wsdserverctl stop', shell=True)
+	
+	@staticmethod
+	def status():
+		tag_srv, wsd_srv = int(subprocess.check_output('ps -ef | grep taggerServer | wc -l', shell=True)) - 2, int(subprocess.check_output('ps -ef | grep DisambiguatorServer | wc -l', shell=True)) - 2
+		return tag_srv, wsd_srv
+
+	def __init__(self):
+		from pymetamap import MetaMap
+		self.mm = MetaMap.get_instance(os.path.join(os.environ['METAMAP_HOME'], 'bin', 'metamap'))
+		
+	def __del__(self):
+		del self.mm
+		
+	def __enter__(self):
+		Wrapper.start_service([1 - x for x in Wrapper.status()])
+		return self
+		
+	def __exit__(self, type, value, traceback):
+		Wrapper.stop_service()
+		
+	def _post_process(self, concepts, error):
+		result = OrderedDict()
+		for concept in concepts:
+			result.setdefault(int(concept.index) - 1, []).append(concept)
+		return result, error
+		
+	def raw_parse(self, text):
+		import spacy
+		spacy_nlp = spacy.load('en')
+		doc = spacy_nlp(nlp.clean_text(text, encoding=''))
+		sents = [str(sent) for sent in doc.sents]
+		return self._post_process(*self.mm.extract_concepts(sents, range(1, len(sents) + 1)))
+		
+	def parse(self, tokens):
+		return self._post_process(*self.mm.extract_concepts(tokens, range(1, len(tokens) + 1)))
 
 
-DATA_PATH = 'D:\data\chmannot\mesh' #os.path.join(os.path.expanduser('~'), 'data', 'chmannot', 'mesh')
-
-
-def get_mesh(pmids, from_file=None, ft_type='binary', max_df=1.0, min_df=1, fmt='npz', spfmt='csc'):
+def get_mesh_from_file(pmids):
 	mesh_term_list = []
 	for pmid in pmids:
 		current_phrase = ''
@@ -47,6 +112,11 @@ def get_mesh(pmids, from_file=None, ft_type='binary', max_df=1.0, min_df=1, fmt=
 			mesh_term = ' '.join(line_snip[0].split('(')[0].split()[1:]).strip()
 			if (mesh_term): mesh_terms.append(mesh_term)
 		mesh_term_list.append(set(mesh_terms))
+	return mesh_term_list
+	
+	
+def mesh_countvec(pmids, from_file=None, ft_type='binary', max_df=1.0, min_df=1, fmt='npz', spfmt='csr'):
+	mesh_term_list = get_mesh_from_file(pmids)
 	union_mesh_terms = list(set().union(*mesh_term_list))
 	mlb = MultiLabelBinarizer(classes=union_mesh_terms)
 	mesh_mt = (mlb.fit_transform(mesh_term_list), mlb.classes_)

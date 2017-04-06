@@ -11,6 +11,7 @@
 
 import os
 import yaml
+import cStringIO
 import cPickle as pickle
 import numpy as np
 import pandas as pd
@@ -19,8 +20,13 @@ from scipy import sparse
 import fs
 
 
+def parse_json(json_str):
+	fp = cStringIO.StringIO(json_str)
+	return json.load(fp)
+
+
 def write_obj(obj, fpath='obj'):
-#	fs.mkdir(os.path.dirname(fpath))
+	fs.mkdir(os.path.dirname(fpath))
 	with open(os.path.splitext(fpath)[0] + '.pkl', 'wb') as f:
 		pickle.dump(obj, f)
 	
@@ -55,7 +61,7 @@ def read_npz(fpath):
 
 
 def write_df(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compress=False):
-#	fs.mkdir(os.path.dirname(fpath))
+	fs.mkdir(os.path.dirname(fpath))
 	fpath = os.path.splitext(fpath)[0] + '.npz'
 	if (compress):
 		save_f = np.savez_compressed

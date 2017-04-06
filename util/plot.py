@@ -16,6 +16,7 @@ import platform
 
 import numpy as np
 import scipy as sp
+import pandas as pd
 import matplotlib as mpl
 if (platform.system() == 'Linux'):
 	mpl.use('Agg')
@@ -23,6 +24,7 @@ if (platform.system() == 'Linux'):
 	# mpl.use('GTKAgg')
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
+import matplotlib.path as mpath
 
 import io
 
@@ -84,7 +86,7 @@ def smooth_data(x, y, pnum=300):
 	return new_x, new_y
 
 
-def plot_roc(data, labels, groups=None, title='Receiver operating characteristic', fname='roc', ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+def plot_roc(data, labels, groups=None, title='Receiver operating characteristic', fname='roc', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 
 	fig = plt.figure()
@@ -127,7 +129,7 @@ def plot_roc(data, labels, groups=None, title='Receiver operating characteristic
 	plt.close()
 
 
-def plot_prc(data, labels, groups=None, title='Precision recall characteristic', fname='prc', ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+def plot_prc(data, labels, groups=None, title='Precision recall characteristic', fname='prc', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	
 	fig = plt.figure()
@@ -169,7 +171,7 @@ def plot_prc(data, labels, groups=None, title='Precision recall characteristic',
 	plt.close()
 
 
-def plot_bar(avg, std, xlabels, labels=None, title='Scores of mean and standard deviation', fname='score_mean_std', ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+def plot_bar(avg, std, xlabels, labels=None, title='Scores of mean and standard deviation', fname='score_mean_std', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	
 	fig = plt.figure()
@@ -213,7 +215,7 @@ def plot_bar(avg, std, xlabels, labels=None, title='Scores of mean and standard 
 	plt.close()
 	
 	
-def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, fit_line=False, title='Histogram', fname='hist', ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, fit_line=False, title='Histogram', fname='hist', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	
 	fig = plt.figure()
@@ -257,7 +259,7 @@ def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, f
 	plt.close()
 	
 	
-def plot_2hist(data1, data2, xlabel, ylabel, normed=False, cumulative=False, log=False, title='2Histogram', fname='2hist', annotator=None, annotation={}):
+def plot_2hist(data1, data2, xlabel, ylabel, normed=False, cumulative=False, log=False, title='2Histogram', fname='2hist', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	
 	fig = plt.figure()
@@ -290,7 +292,7 @@ def plot_2hist(data1, data2, xlabel, ylabel, normed=False, cumulative=False, log
 	plt.close()
 	
 	
-def plot_scat(data, xlabel, ylabel, scale=(None, None), title='Scatter', fname='scat', annotator=None, annotation={}):
+def plot_scat(data, xlabel, ylabel, scale=(None, None), title='Scatter', fname='scat', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	
 	fig = plt.figure()
@@ -322,7 +324,7 @@ def plot_scat(data, xlabel, ylabel, scale=(None, None), title='Scatter', fname='
 	plt.close()
 	
 	
-def plot_ftnum(data, labels, marker=False, title='Micro F1 Score of default RF with different feature numbers', fname='ftnum', annotator=None, annotation={}):
+def plot_ftnum(data, labels, marker=False, title='Micro F1 Score of default RF with different feature numbers', fname='ftnum', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	
 	fig = plt.figure()
@@ -357,8 +359,153 @@ def plot_ftnum(data, labels, marker=False, title='Micro F1 Score of default RF w
 	else:
 		plt.savefig(fname)
 	plt.close()
+
+	
+def plot_clt(data, labels, decomp=False, title='Clustering', fname='clustering', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+	global MON
+	
+	fig = plt.figure()
+	ax = plt.axes()
+	
+	if (data.shape[1] > 2 and decomp):
+		from sklearn.pipeline import make_pipeline
+		from .. import ftdecomp
+		pipeline = make_pipeline(ftdecomp.DecompTransformer(n_components, ftdecomp.t_sne, initial_dims=min(15*n_components, X.shape[1]), perplexity=30.0), Normalizer(copy=False), MinMaxScaler(copy=False))
+		new_data = pipeline.fit_transform(data.as_matrix())
+		if (isinstance(data, pd.DataFrame)):
+			data = pd.DataFrame(new_data, index=data.index, dtype=data.dtypes[0])
+		else:
+			data = new_data
+	
+	unq_labels = np.unique(labels)
+	label_map = dict(zip(unq_labels, range(len(unq_labels))))
+	markers = gen_markers(len(unq_labels))
+	if (unq_labels[0] == -1):
+		colors, alphas = gen_colors(len(unq_labels) - 1)
+		colors, alphas = ['grey'] + colors, [1] + alphas
+	else:
+		colors, alphas = gen_colors(len(unq_labels))
+	plot_colors = [colors[label_map[x]] for x in labels]
+	plt.scatter(data[:,0], data[:,1], c=plot_colors, edgecolors=plot_colors)
+
+	plt.xlabel('$x_{1}$', fontsize=15)
+	plt.ylabel('$x_{2}$', fontsize=15)
+	plt.title(title)
+	plt.grid(True)
+	
+	if (plot_cfg.setdefault('save_obj', False)):
+		io.write_obj(fig, fname)
+	if (plot_cfg.setdefault('save_npz', False)):
+		io.write_npz(dict(func='plot_clt', data=data, labels=labels, decomp=decomp, title=title), fname)
+	
+	plt.tight_layout()
+	handle_annot(fig, annotator, annotation)
+	if (MON):
+		plt.show()
+	else:
+		plt.savefig(fname)
+	plt.close()
 	
 	
+def plot_fzyclt(data, labels, decomp=False, title='Clustering', fname='clustering', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+	if (data.shape[0] != labels.shape[0]):
+		print 'Input data shape %s is not consistent with the label shape %s !' % (data.shape, labels.shape)
+		return
+	global MON
+	
+	fig = plt.figure()
+	ax = plt.axes()
+	
+	if (data.shape[1] > 2 and decomp):
+		from sklearn.pipeline import make_pipeline
+		from .. import ftdecomp
+		pipeline = make_pipeline(ftdecomp.DecompTransformer(n_components, ftdecomp.t_sne, initial_dims=min(15*n_components, X.shape[1]), perplexity=30.0), Normalizer(copy=False), MinMaxScaler(copy=False))
+		new_data = pipeline.fit_transform(data.as_matrix())
+		if (isinstance(data, pd.DataFrame)):
+			data = pd.DataFrame(new_data, index=data.index, dtype=data.dtypes[0])
+		else:
+			data = new_data
+	
+	markers = gen_markers(labels.shape[1])
+	colors, alphas = gen_colors(labels.shape[1])
+	label_sum = labels.sum(axis=1)
+	full_data_list, full_colors, edge_colors = [[] for x in range(3)]
+	for i, ls in enumerate(label_sum):
+		if (ls == 0):
+			full_data_list.append(data[i,:])
+			full_colors.append('grey')
+			edge_colors.append('grey')
+		else:
+			label = labels[i]
+			full_data_list.append(data[i,:].reshape((1, data.shape[1])).repeat(ls, axis=0))
+			full_colors.extend([colors[x] for x in np.where(label > 0)[0]])
+			label_idx = np.where(label > 0)[0]
+			edge_colors.extend([colors[label_idx[0]]] + [colors[-1-x] for x in label_idx[1:]])
+	full_data = np.vstack(full_data_list)
+	plt.scatter(full_data[:,0], full_data[:,1], c=full_colors, edgecolors=edge_colors)
+
+	plt.xlabel('$x_{1}$', fontsize=15)
+	plt.ylabel('$x_{2}$', fontsize=15)
+	plt.title(title)
+	plt.grid(True)
+	
+	if (plot_cfg.setdefault('save_obj', False)):
+		io.write_obj(fig, fname)
+	if (plot_cfg.setdefault('save_npz', False)):
+		io.write_npz(dict(func='plot_clt', data=data, labels=labels, decomp=decomp, title=title), fname)
+	
+	plt.tight_layout()
+	handle_annot(fig, annotator, annotation)
+	if (MON):
+		plt.show()
+	else:
+		plt.savefig(fname)
+	plt.close()
+	
+	
+def plot_clt_hrc(data, title='', dist_metric='euclidean', fname='hrc_clustering', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+	global MON
+	
+	if (not style is None):
+		plt.style.use(style)
+
+	fig = plt.figure()
+	
+	if ((dist_metric == 'precomputed' and data.shape[0] != data.shape[1]) or len(data.shape) != 2):
+		dist_metric='euclidean'
+	from sklearn.metrics.pairwise import pairwise_distances
+	D = pairwise_distances(data, metric=dist_metric)
+	
+	# dendrogram
+	import scipy.cluster.hierarchy as sch
+	ax_dendro_l, ax_dendro_t = fig.add_axes([0.01,0.01,0.2,0.8]), fig.add_axes([0.22,0.82,0.7,0.17])
+	Y_l, Y_t = sch.linkage(D, method='centroid'), sch.linkage(D, method='centroid')
+	Z_l, Z_t = sch.dendrogram(Y_l, orientation='left', ax=ax_dendro_l), sch.dendrogram(Y_t, orientation='top', ax=ax_dendro_t)
+	axdlx, axdly, axdrx, axdry = ax_dendro_l.set_xticks([]), ax_dendro_l.set_yticks([]), ax_dendro_t.set_xticks([]), ax_dendro_t.set_yticks([])
+
+	# distance matrix
+	ax_matrix = fig.add_axes([0.22,0.01,0.7,0.8])
+	index = Z_l['leaves']
+	D = D[index,:][:,index]
+	im = ax_matrix.matshow(D, aspect='auto', origin='lower', cmap=plt.cm.coolwarm)
+	axmx, axmy = ax_matrix.set_xticks([]), ax_matrix.set_yticks([])
+	
+	# colorbar
+	ax_color = fig.add_axes([0.93,0.01,0.02,0.8])
+	fig.colorbar(im, cax=ax_color)
+	
+	if (plot_cfg.setdefault('save_obj', False)):
+		io.write_obj(fig, fname)
+	if (plot_cfg.setdefault('save_npz', False)):
+		io.write_npz(dict(func='plot_clt', data=data, labels=labels, decomp=decomp, title=title), fname)
+	
+	handle_annot(fig, annotator, annotation)
+	if (MON):
+		plt.show()
+	else:
+		plt.savefig(fname)
+	plt.close()
+
 
 def plot_fig(fig, fname='fig'):
 	global MON
@@ -368,7 +515,7 @@ def plot_fig(fig, fname='fig'):
 		fig.savefig(fname)
 		
 		
-def plot_data(data, fname='fig', ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+def plot_data(data, fname='fig', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	func = globals()[data['func'].item()]
 	params = dict(data)
@@ -376,19 +523,20 @@ def plot_data(data, fname='fig', ref_lines={}, plot_cfg={}, annotator=None, anno
 	for k, v in params.iteritems():
 		if (len(v.shape) == 0):
 			params[k] = v.item()
-	func(ref_lines=ref_lines, plot_cfg=plot_cfg, annotator=annotator, annotation=annotation, **params)
+	func(style=style, ref_lines=ref_lines, plot_cfg=plot_cfg, annotator=annotator, annotation=annotation, **params)
 	
 	
-def plot_files(fpaths, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+def plot_files(fpaths, style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	if (type(fpaths) is not list):
 		fpaths = [fpaths]
 	for fpath in fpaths:
-		if (os.path.splitext(fpath)[1] == '.pkl'):
+		fname, fext = os.path.splitext(fpath)
+		if (fext == '.pkl'):
 			fig = io.read_obj(fpath)
-			plot_fig(fig, os.path.splitext(fpath)[0])
-		elif (os.path.splitext(fpath)[1] == '.npz'):
+			plot_fig(fig, fname)
+		elif (fext == '.npz'):
 			data = io.read_npz(fpath)
-			plot_data(data, ref_lines=ref_lines, plot_cfg=plot_cfg, annotator=annotator, annotation=annotation)
+			plot_data(data, fname=fname, style=style, ref_lines=ref_lines, plot_cfg=plot_cfg, annotator=annotator, annotation=annotation)
 	
 
 def main():

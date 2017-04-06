@@ -14,8 +14,8 @@ from xml.etree.ElementTree import XMLParser
 from xml.etree.ElementTree import tostring
 
 
-def get_parser(builder):
-	return XMLParser(target=builder)
+def get_parser(builder, encoding='utf-8'):
+	return XMLParser(target=builder, encoding=encoding)
 
 
 def extrc_list(listhead_path, elem_tag, content_path, xml_tree=None, xml_str='', ret_type='text'):

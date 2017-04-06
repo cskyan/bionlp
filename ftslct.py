@@ -18,7 +18,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.feature_selection import SelectKBest
 
-import bionlp.util.io as io
+from util import io
 	
 	
 def cooc_mt(X, Y):
@@ -199,6 +199,7 @@ def filtref(cur_f, ref_f, ori_f=None):
 	
 def gen_fis(X, Y, filtfunc=freqs, scaled=True, **kwargs):
 	fi_list, pval_list = [[] for i in range(2)]
+	if (len(Y.shape) == 1): Y = Y.reshape((-1, 1))
 	for i in xrange(Y.shape[1]):
 		y = Y[:,i].reshape((-1,1))
 		fi, pval = filtfunc(X, y, scaled=scaled, **kwargs)
@@ -266,7 +267,7 @@ class MSelectKBest(SelectKBest):
 #	ff_kwargs = {}
 	def __init__(self, score_func=freqs, k=10, **kwargs):
 #		if len(kwargs)>0: MSelectKBest.ff_kwargs = kwargs
-		super(SelectKBest, self).__init__(score_func)
+		super(MSelectKBest, self).__init__(score_func)
 		self.k = k
 		self.sf_kwargs = kwargs
 
@@ -279,7 +280,7 @@ class MSelectKBest(SelectKBest):
 		
 class MSelectOverValue(SelectKBest):
 	def __init__(self, score_func=freqs, threshold=0, **kwargs):
-		super(SelectKBest, self).__init__(score_func)
+		super(MSelectOverValue, self).__init__(score_func)
 		self.threshold = threshold
 		self.sf_kwargs = kwargs
 

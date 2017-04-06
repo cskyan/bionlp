@@ -10,16 +10,21 @@
 #
 
 import os
+import re
 import codecs
+import StringIO
+import cStringIO
 
 
 def mkdir(path):
-	if not os.path.exists(path):
+	if path and not os.path.exists(path):
 		print "Creating folder: " + path
 		os.makedirs(path)
 		
 
 def read_file(fpath, code='ascii'):
+	if (isinstance(fpath, StringIO.StringIO) or isinstance(fpath, cStringIO.InputType)):
+		return fpath.readlines()
 	try:
 		data_str = []
 		if (code.lower() == 'ascii'):
@@ -45,7 +50,10 @@ def read_files(fpaths, code='ascii'):
 			continue
 	
 	
-def write_file(fpath, content, code='ascii'):
+def write_file(content, fpath, code='ascii'):
+	if (isinstance(fpath, StringIO.StringIO) or isinstance(fpath, cStringIO.OutputType)):
+		fpath.write(content)
+		return
 	try:
 		if (code.lower() == 'ascii'):
 			with open(fpath, mode='w') as fd:
@@ -61,19 +69,24 @@ def write_file(fpath, content, code='ascii'):
 		exit(-1)
 		
 		
-def write_files(fpaths, contents, code='ascii'):
+def write_files(contents, fpaths, code='ascii'):
 	for i in xrange(min(len(fpaths), len(contents))):
 		try:
-			write_file(fpaths[i], contents[i], code)
+			write_file(contents[i], fpaths[i], code)
 		except Exception as e:
 			continue
 
+			
+def pardir(path):
+	return os.path.abspath(os.path.join(path, os.pardir))
+			
 		
-def listf(path, full_path=False):
+def listf(path, pattern='.*', full_path=False):
+	prog = re.compile(pattern)
 	if (full_path):
-		return [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+		return [os.path.join(path, f) for f in os.listdir(path) if prog.match(f) and os.path.isfile(os.path.join(path, f))]
 	else:
-		return [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+		return [f for f in os.listdir(path) if prog.match(f) and os.path.isfile(os.path.join(path, f))]
 
 
 def traverse(path):

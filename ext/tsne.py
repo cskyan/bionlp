@@ -14,7 +14,6 @@
 #  Modified by Shankai Yan on 08-09-2016 for adaption of large dataset
 
 import numpy as Math
-import pylab as Plot
 
 def Hbeta(D = Math.array([]), beta = 1.0):
 	"""Compute the perplexity and the P-row for a specific value of the precision of a Gaussian distribution."""
@@ -207,6 +206,7 @@ def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0):
 
 
 if __name__ == "__main__":
+	import pylab as Plot
 	print "Run Y = tsne.tsne(X, no_dims, perplexity) to perform t-SNE on your dataset."
 	print "Running example on 2,500 MNIST digits..."
 	X = Math.loadtxt("mnist2500_X.txt");
