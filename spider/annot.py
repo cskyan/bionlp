@@ -91,7 +91,7 @@ def exportabs(pmid, fpath='annot'):
 	return content
 	
 	
-def annotonto(txt, ontog, idns='', prdns=[], idprds={}):
+def annotonto(txt, ontog, lang='en', idns='', prdns=[], idprds={}):
 	annotations = []
 	init_tokens, locs = nlp.tokenize(txt, model='word', ret_loc=True)
 	if (len(init_tokens) == 0): return annotations
@@ -100,6 +100,6 @@ def annotonto(txt, ontog, idns='', prdns=[], idprds={}):
 	except:
 		tokens, locs = init_tokens, locs
 	for token, loc in zip(tokens, locs):
-		idlabels = ontology.get_id(ontog, token, idns=idns, prdns=prdns, idprds=idprds)
+		idlabels = ontology.get_id(ontog, token, lang=lang, idns=idns, prdns=prdns, idprds=idprds)
 		annotations.extend([(id, label, token, loc) for id, label in idlabels])
 	return annotations

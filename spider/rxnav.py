@@ -79,7 +79,7 @@ class DrugBuilder():
 		return {'name':self.name,'concept_group':self.concept_group}
 		
 		
-BUILDER_MAP = {'drugs':DrugBuilder, 'interaction':DrugBuilder}
+BUILDER_MAP = {'drugs':DrugBuilder}
 
 
 class RxNavAPI(APIClient, object):
@@ -109,7 +109,7 @@ class RxNavAPI(APIClient, object):
 			parser.close()
 			return builder.build()
 		elif (self.restype == 'json'):
-			return json.dumps(nlp.clean_text(response.data, encoding='utf-8', replacement=None)).replace('\\', '')
+			return json.loads(nlp.clean_text(response.data, encoding='utf-8', replacement=None).replace('\\', ''))
 	
 	def call(self, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])

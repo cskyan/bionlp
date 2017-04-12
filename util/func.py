@@ -10,10 +10,14 @@
 #
 
 import copy
+import difflib
 import operator
 import itertools
 from collections import OrderedDict
 
+
+def strsim(a, b):
+	return difflib.SequenceMatcher(None, a, b).ratio()
 
 def capital_first(text):
 	new_txt = text[0].upper() + text[1:]

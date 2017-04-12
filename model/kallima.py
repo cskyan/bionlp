@@ -275,7 +275,15 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 	def _conductance(self, g, vset, clt):
 		clt_array, cmp_clt_array = np.array(clt), np.array(list(vset - set(clt)))
 		edge_cut = self._cut_val(g, [clt], method='mincut')
-		return 2.0 * edge_cut / min(g[clt_array,:][:,clt_array].sum(), g[cmp_clt_array,:][:,cmp_clt_array].sum())
+		e_sum, cmpe_sum = g[clt_array,:][:,clt_array].sum(), g[cmp_clt_array,:][:,cmp_clt_array].sum()
+		if (e_sum == 0):
+			if (cmpe_sum == 0):
+				return 0
+			else:
+				return 2.0 * edge_cut / cmpe_sum
+		elif (cmpe_sum == 0):
+			return 2.0 * edge_cut / e_sum
+		return 2.0 * edge_cut / min(e_sum, cmpe_sum)
 		
 	def _cross_merge(self, node, g, vset):
 		merged_nodes = []

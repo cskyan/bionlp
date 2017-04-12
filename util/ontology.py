@@ -43,7 +43,6 @@ RDFS = Namespace('http://www.w3.org/2000/01/rdf-schema#')
 XSD = Namespace('http://www.w3.org/2001/XMLSchema#')
 OWL = Namespace('http://www.w3.org/2002/07/owl#')
 MESHV = Namespace('http://id.nlm.nih.gov/mesh/vocab#')
-DOID = Namespace('http://purl.obolibrary.org/obo/doid#')
 OBO = Namespace('http://purl.obolibrary.org/obo/obo/')
 OBOWL = Namespace('http://www.geneontology.org/formats/oboInOwl#')
 DBID = Namespace('http://www.drugbank.ca/drugbank-id/')
@@ -160,7 +159,7 @@ def get_id(g, label, lang='en', idns='', prdns=[], idprds={}):
 	q_str = '''
 		SELECT DISTINCT ?x ?c WHERE { 
 			%s .
-			FILTER contains(?c, "%s")
+			FILTER contains(lcase(str(?c)), "%s")
 			FILTER langMatches(lang(?c), "%s")}
 		''' % (where_clause, label, lang)
 	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
