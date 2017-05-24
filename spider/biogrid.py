@@ -13,7 +13,6 @@ import os
 import sys
 import copy
 import json
-import xmlextrc
 
 from apiclient import APIClient
 # from abc import ABCMeta

@@ -9,6 +9,7 @@
 ###########################################################################
 #
 
+import time
 from multiprocessing import Process, Pool
 
 
@@ -18,15 +19,14 @@ def run(target, **kwargs):
 	p.join()
 
 
-def run_pool(target, **kwargs):
-	res_list = []
+def run_pool(target, n_jobs=1, dist_param=[], **kwargs):
+	res_list, fix_kwargs, iter_kwargs = [], {}, {}
 	def collect_res(res):
 		res_list.append(res)
-	pool = Pool()
-	fix_kwargs, iter_kwargs = {}, {}
+	pool = Pool(processes=n_jobs)
 	# Separate iterable arguments and singular arguments
 	for k, v in kwargs.iteritems():
-		if (hasattr(v, '__iter__')):
+		if (k in dist_param and hasattr(v, '__iter__')):
 			iter_kwargs[k] = v
 		else:
 			fix_kwargs[k] = v
@@ -38,3 +38,43 @@ def run_pool(target, **kwargs):
 	pool.close()
 	pool.join()
 	return res_list
+	
+	
+def run_ipp(target, n_jobs=1, dist_param=[], **kwargs):
+	import ipyparallel as ipp
+	from subprocess import Popen
+	pstart = Popen(['ipcluster', 'start', '-n', '%i' % n_jobs])
+	time.sleep(5)
+	try:
+		c = ipp.Client(timeout=5)
+		res_list, fix_kwargs, iter_kwargs = [], {}, {}
+		# Separate iterable arguments and singular arguments
+		for k, v in kwargs.iteritems():
+			if (k in dist_param and hasattr(v, '__iter__')):
+				iter_kwargs[k] = v
+			else:
+				fix_kwargs[k] = v
+		# Construct arguments for each process
+		for i, argv in enumerate(zip(*iter_kwargs.values())):
+			args = dict(zip(iter_kwargs.keys(), argv))
+			args.update(fix_kwargs)
+			r = c[c.ids[i % len(c.ids)]].apply_async(target, **args)
+			res_list.append(r)
+		if c.wait(res_list):
+			results = [r.get() for r in res_list]
+		else:
+			print 'No results return!'
+			results = []
+		c.shutdown(hub=True)
+		pstart.terminate()
+		pend = Popen(['ipcluster', 'stop'])
+		time.sleep(5)
+		pend.terminate()
+		return results
+	except Exception as e:
+		print e
+		pstart.terminate()
+		pend = Popen(['ipcluster', 'stop'])
+		time.sleep(5)
+		pend.terminate()
+		return []

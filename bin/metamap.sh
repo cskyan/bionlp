@@ -22,6 +22,6 @@ done
 skrmedpostctl start && wsdserverctl start
 
 find $dir -type f | while read file
-do	
+do
 	metamap $file "$dir/`basename "$file" .txt`.mesh.txt"
 done

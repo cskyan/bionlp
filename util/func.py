@@ -32,12 +32,15 @@ def conserved_title(text):
 	return new_txt
 	
 	
-def sorted_dict(data):
+def sorted_dict(data, key='value'):
 	if (type(data) is not dict):
 		print 'Please input a Python dictionary!'
 		return None
 	else:
-		return sorted(data.items(), key=operator.itemgetter(1))
+		if (key == 'value'):
+			return sorted(data.items(), key=operator.itemgetter(1))
+		else:
+			return sorted(data.items(), key=operator.itemgetter(0))
 		
 		
 def sorted_tuples(data, key_idx=0):
@@ -59,6 +62,7 @@ def update_dict(dict1, dict2):
 	
 def flatten_list(nested_list):
 	l = list(itertools.chain.from_iterable(nested_list))
+	if (len(l) == 0): return []
 	if (type(l[0]) is list):
 		return flatten_list(l)
 	else:

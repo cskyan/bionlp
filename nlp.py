@@ -25,6 +25,10 @@ from util import io
 
 def get_nltk_words():
 	return nltk.corpus.words.words()
+	
+	
+def clean_txt(text):
+	return text.encode('ascii', 'ignore').decode('ascii').replace('\\', '')
 
 
 def clean_text(text, encoding='ascii', replacement=' '):
@@ -32,9 +36,9 @@ def clean_text(text, encoding='ascii', replacement=' '):
 	if (encoding == ''):
 		return unicodedata.normalize('NFC', text.decode('utf-8', errors='replace'))
 	elif (replacement is None):
-		return unicodedata.normalize('NFC', text.decode('utf-8', errors='replace')).encode(encoding, 'replace')
+		return unicodedata.normalize('NFC', text.decode('utf-8', errors='replace')).encode(encoding, errors='replace')
 	else:
-		return unicodedata.normalize('NFC', text.decode('utf-8', errors='replace')).encode(encoding, 'replace').replace('?', ' ')
+		return unicodedata.normalize('NFC', text.decode('utf-8', errors='replace')).encode(encoding, errors='replace').replace('?', replacement)
 
 	
 def find_location(text, tokens):

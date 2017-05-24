@@ -10,6 +10,7 @@
 #
 
 import os
+import re
 import sys
 import logging
 import itertools
@@ -156,12 +157,27 @@ def get_db_graph(db_path, db_name='', db_type='Sleepycat'):
 def get_id(g, label, lang='en', idns='', prdns=[], idprds={}):
 	prepareQuery = get_prepareq(g)
 	where_clause = ' UNION '.join(['''{?x %s ?c}''' % ':'.join(p) for p in idprds.keys()])
+	# The 'i' parameter in regex function means case insensitive
 	q_str = '''
 		SELECT DISTINCT ?x ?c WHERE { 
 			%s .
-			FILTER contains(lcase(str(?c)), "%s")
+			FILTER regex(str(?c), "%s", "i")
 			FILTER langMatches(lang(?c), "%s")}
-		''' % (where_clause, label, lang)
+		''' % (where_clause, re.sub(r'^\+|[?|$|!]', r'.', label), lang)
+	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
+	result = g.query(q)
+	return [(row[0].strip(idns), row[1].toPython()) for row in result]
+	
+	
+def get_label(g, id, lang='en', idns='', prdns=[], lbprds={}):
+	prepareQuery = get_prepareq(g)
+	where_clause = ' UNION '.join(['''{"%s" %s ?o}''' % (id, ':'.join(p)) for p in lbprds.keys()])
+	# The 'i' parameter in regex function means case insensitive
+	q_str = '''
+		SELECT DISTINCT ?o WHERE { 
+			%s .
+			FILTER langMatches(lang(?o), "%s")}
+		''' % (where_clause, lang)
 	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
 	result = g.query(q)
 	return [(row[0].strip(idns), row[1].toPython()) for row in result]

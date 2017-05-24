@@ -22,6 +22,32 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.metrics.pairwise import pairwise_distances as pdist
 
+from util import njobs
+
+
+def parallel_pairwise(X, Y, func, n_jobs=1, symmetric=False, min_chunksize=1, **kwargs):
+	from sklearn.metrics import pairwise
+	from sklearn.utils import gen_even_slices
+	# from sklearn.externals.joblib import Parallel
+	# from sklearn.externals.joblib import delayed
+	from sklearn.externals.joblib import cpu_count
+	import parmap
+	if n_jobs < 0:
+		n_jobs = max(cpu_count() + 1 + n_jobs, 1)
+	if Y is None:
+		Y = X
+	if n_jobs == 1:
+		return func(X, Y, **kwargs)
+	# if (hasattr(Y, 'shape')):
+		# pairwise._parallel_pairwise(X, Y, func, n_jobs, **kwargs)
+	slices = [slice(min_chunksize*s.start,min_chunksize*s.stop) for s in gen_even_slices(len(Y)/min_chunksize, n_jobs)]
+	# ret = Parallel(n_jobs=n_jobs, verbose=5)(delayed(func)(X, Y[s], **kwargs) for s in slices)
+	# ret = njobs.run_pool(func, n_jobs=n_jobs, dist_param=['Y'], X=X, Y=[Y[s] for s in slices], **kwargs)
+	# ret = njobs.run_ipp(func, n_jobs=n_jobs, dist_param=['Y'], X=X, Y=[Y[s] for s in slices], **kwargs)
+	ret = [r.T for r in parmap.map(func, [Y[s] for s in slices], X, processes=n_jobs)] # have not supported passing kwargs to func
+	if (len(ret) == 0): return []
+	return np.hstack(ret)
+
 
 def normdist(D):
 	return (D - D.min()) / (D.max() - D.min())

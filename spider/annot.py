@@ -17,7 +17,7 @@ import cStringIO
 
 import becas
 
-from ..util import fs, ontology
+from ..util import fs, func, ontology
 from .. import nlp
 
 
@@ -34,11 +34,11 @@ def init():
 
 
 # Annotate the text as entirety
-def annotxt(txt, retype='dict', with_mdf=False):
-	if (type(txt) is dict):
-		results = txt
+def annotext(text, retype='dict', with_mdf=False):
+	if (type(text) is dict):
+		results = text
 	else:
-		results = becas.annotate_text(txt)
+		results = becas.annotate_text(text)
 	if (retype == 'dict'):
 		return results
 	elif (retype == 'group'):
@@ -65,8 +65,8 @@ def annotxt(txt, retype='dict', with_mdf=False):
 
 
 # Annotate each sentences separately
-def exportxt(txt, fpath='annot', fmt='json'):
-	content = becas.export_text(txt, fmt)
+def exportext(text, fpath='annot', fmt='json'):
+	content = becas.export_text(text, fmt)
 	fs.write_file(content, os.path.splitext(fpath)[0] + '.' + fmt, code='utf8')
 	return content
 
@@ -91,9 +91,9 @@ def exportabs(pmid, fpath='annot'):
 	return content
 	
 	
-def annotonto(txt, ontog, lang='en', idns='', prdns=[], idprds={}):
+def annotonto(text, ontog, lang='en', idns='', prdns=[], idprds={}, dominant=False, lbprds={}):
 	annotations = []
-	init_tokens, locs = nlp.tokenize(txt, model='word', ret_loc=True)
+	init_tokens, locs = nlp.tokenize(text, model='word', ret_loc=True)
 	if (len(init_tokens) == 0): return annotations
 	try:
 		tokens, locs = nlp.del_punct(init_tokens, location=locs)
@@ -101,5 +101,8 @@ def annotonto(txt, ontog, lang='en', idns='', prdns=[], idprds={}):
 		tokens, locs = init_tokens, locs
 	for token, loc in zip(tokens, locs):
 		idlabels = ontology.get_id(ontog, token, lang=lang, idns=idns, prdns=prdns, idprds=idprds)
-		annotations.extend([(id, label, token, loc) for id, label in idlabels])
+		if (dominant):
+			annotations.extend(func.flatten_list([[(id, idlb[1], token, loc) for idlb in ontology.get_label(ontog, id, lang=lang, idns=idns, prdns=prdns, lbprds=lbprds)] for id, label in idlabels]))
+		else:
+			annotations.extend([(id, label, token, loc) for id, label in idlabels])
 	return annotations

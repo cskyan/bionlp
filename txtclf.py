@@ -665,6 +665,14 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_j
 		score_avg_cube[tuple(idx)] = score_avg_list[i]
 		score_std_cube[tuple(idx)] = score_std_list[i]
 	return grid.best_params_, grid.best_score_, score_avg_cube, score_std_cube, dim_names, dim_vals
+	
+	
+def analyze_param(param_name, score_avg, score_std, dim_names, dim_vals, best_params):
+    best_param_idx = dict([(k, (dim_names[k], dim_vals[k][best_params[k]])) for k in dim_names.keys()])
+    best_param_idx[param_name] = (best_param_idx[param_name][0], slice(0, score_avg.shape[dim_names[param_name]]))
+    _, slicing = zip(*func.sorted_tuples(best_param_idx.values(), key_idx=0))
+    param_vals, _ = zip(*func.sorted_dict(dim_vals[param_name], key='value'))
+    return np.array(param_vals), score_avg[slicing], score_std[slicing]
 
 
 def tune_param_bak(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_jobs=-1):

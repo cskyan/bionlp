@@ -25,7 +25,7 @@ from ..util import fs
 from ..util import oo
 
 if sys.platform.startswith('win32'):
-	DATA_PATH = 'D:\data\ontolib\store'
+	DATA_PATH = 'D:\\data\\ontolib\\store'
 elif sys.platform.startswith('linux2'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'ontolib', 'store')
 	

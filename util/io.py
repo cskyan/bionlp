@@ -58,6 +58,32 @@ def read_npz(fpath):
 		return np.load(fpath)
 	else:
 		print 'File %s does not exist!' % fpath
+		
+		
+def write_spmt(mt, fpath, sparse_fmt='csr', compress=False):
+	fs.mkdir(os.path.dirname(fpath))
+	fpath = os.path.splitext(fpath)[0] + '.npz'
+	if (compress):
+		save_f = np.savez_compressed
+	else:
+		save_f = np.savez
+	if (not sparse.isspmatrix(mt)):
+		mt = sparse.csc_matrix(mt) if sparse_fmt == 'csc' else sparse.csr_matrix(mt)
+	if (sparse_fmt == 'csc'):
+		save_f(fpath, data=mt.data, indices=mt.indices, indptr=mt.indptr, shape=mt.shape)
+	elif (sparse_fmt == 'csr'):
+		save_f(fpath, data=mt.data, indices=mt.indices, indptr=mt.indptr, shape=mt.shape)
+	else:
+		write_spmt(mt.tocsr(), fpath, sparse_fmt='csr', compress=compress)
+		
+		
+def read_spmt(fpath, sparse_fmt='csr'):
+	npzfile = read_npz(fpath)
+	if (sparse_fmt == 'csc'):
+		mt = sparse.csc_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape'])
+	else:
+		mt = sparse.csr_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape'])
+	return mt
 
 
 def write_df(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compress=False):

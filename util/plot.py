@@ -324,6 +324,38 @@ def plot_scat(data, xlabel, ylabel, scale=(None, None), title='Scatter', fname='
 	plt.close()
 	
 	
+def plot_param(values, score_avg, score_std, xlabel='Parameter Value', ylabel='Metric Score', title='Micro F1 Score of default RF with different feature numbers', fname='params', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+	global MON
+	
+	fig = plt.figure()
+	ax = plt.axes()
+	
+	lower_val, higher_val = score_avg - score_std, score_avg + score_std
+	
+	plt.scatter(values, score_avg)
+	plt.plot(values, score_avg, linewidth=2, color='r')
+	plt.fill_between(values, lower_val, higher_val, color='w', facecolor='r', alpha=0.3, interpolate=True)
+
+	plt.ylim(lower_val.min() * 0.8, higher_val.max() * 1.2)
+	plt.xlabel(xlabel, fontsize=15)
+	plt.ylabel(ylabel, fontsize=15)
+	plt.title(title)
+	plt.grid(True)
+	
+	if (plot_cfg.setdefault('save_obj', False)):
+		io.write_obj(fig, fname)
+	if (plot_cfg.setdefault('save_npz', False)):
+		io.write_npz(dict(func='plot_param', values=values, score_avg=score_avg, score_std=score_std, xlabel=xlabel, ylabel=ylabel, title=title), fname)
+	
+	plt.tight_layout()
+	handle_annot(fig, annotator, annotation)
+	if (MON):
+		plt.show()
+	else:
+		plt.savefig(fname)
+	plt.close()
+	
+	
 def plot_ftnum(data, labels, marker=False, title='Micro F1 Score of default RF with different feature numbers', fname='ftnum', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	
