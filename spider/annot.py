@@ -102,7 +102,7 @@ def annotonto(text, ontog, lang='en', idns='', prdns=[], idprds={}, dominant=Fal
 	for token, loc in zip(tokens, locs):
 		idlabels = ontology.get_id(ontog, token, lang=lang, idns=idns, prdns=prdns, idprds=idprds)
 		if (dominant):
-			annotations.extend(func.flatten_list([[(id, idlb[1], token, loc) for idlb in ontology.get_label(ontog, id, lang=lang, idns=idns, prdns=prdns, lbprds=lbprds)] for id, label in idlabels]))
+			annotations.extend(func.flatten_list([[(id, idlb, token, loc) for idlb in ontology.get_label(ontog, id, lang=lang, idns=idns, prdns=prdns, lbprds=lbprds)] for id, label in idlabels]))
 		else:
 			annotations.extend([(id, label, token, loc) for id, label in idlabels])
 	return annotations

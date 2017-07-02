@@ -30,6 +30,7 @@ HGNC_PATH = os.path.join(DATA_PATH, 'hgnc')
 
 
 SYMBOL_URL = 'http://www.genenames.org/cgi-bin/symbol_checker'
+MAX_TRIAL = None
 
 
 def symbol_checker(text, match_case=False, approved_symbols=True, previous_symbols=False, synonyms=False, entry_withdrawn=False, show_unmatched=False):
@@ -37,10 +38,15 @@ def symbol_checker(text, match_case=False, approved_symbols=True, previous_symbo
 	data['case'] = 'sensitive' if match_case else 'insensitive'
 	keymap = {'Approved symbol':approved_symbols, 'Previous symbol':previous_symbols, 'Synonyms':synonyms, 'Entry withdrawn':entry_withdrawn, 'Unmatched':show_unmatched}
 	data['show_types'] = [k for k, v in keymap.iteritems() if v]
-	res = requests.post(url=SYMBOL_URL, data=data)
-	if (not res.ok	or res.status_code != 200):
+	trial = 0 if MAX_TRIAL is None else MAX_TRIAL
+	while (MAX_TRIAL is None or trial > 0):
+		res = requests.post(url=SYMBOL_URL, data=data)
+		if (res.ok	and res.status_code == 200):
+			break
+		trial -= 1
+	else:
 		raise RuntimeError('Cannot connect to the service!')
-	txt=StringIO.StringIO(res.text)
+	txt = StringIO.StringIO(res.text)
 	try:
 		return pd.read_table(txt)
 	except Exception as e:

@@ -114,4 +114,4 @@ class RxNavAPI(APIClient, object):
 	def call(self, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
 		args.update((k, v) for k, v in kwargs.iteritems() if args.has_key(k))
-		return APIClient.call(self, '/%s'% self.func_url, **args)
+		return APIClient.call(self, '/%s' % self.func_url, **args)
