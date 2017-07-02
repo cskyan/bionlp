@@ -2,7 +2,7 @@
 # -*- coding=utf-8 -*-
 ###########################################################################
 # Copyright (C) 2013-2016 by Caspar. All rights reserved.
-# File Name: fs.py
+# File Name: io.py
 # Author: Shankai Yan
 # E-mail: sk.yan@my.cityu.edu.hk
 # Created Time: 2016-04-14 10:56:04
@@ -10,6 +10,7 @@
 #
 
 import os
+import sys
 import yaml
 import cStringIO
 import cPickle as pickle
@@ -18,6 +19,11 @@ import pandas as pd
 from scipy import sparse
 
 import fs
+
+
+def inst_print(text):
+	print(text)
+	sys.stdout.flush()
 
 
 def parse_json(json_str):

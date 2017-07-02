@@ -44,12 +44,16 @@ RDFS = Namespace('http://www.w3.org/2000/01/rdf-schema#')
 XSD = Namespace('http://www.w3.org/2001/XMLSchema#')
 OWL = Namespace('http://www.w3.org/2002/07/owl#')
 MESHV = Namespace('http://id.nlm.nih.gov/mesh/vocab#')
-OBO = Namespace('http://purl.obolibrary.org/obo/obo/')
+OBO = Namespace('http://purl.obolibrary.org/obo/')
 OBOWL = Namespace('http://www.geneontology.org/formats/oboInOwl#')
 DBID = Namespace('http://www.drugbank.ca/drugbank-id/')
 DBV = Namespace('http://www.drugbank.ca/vocab#')
 
 opts, args = {}, []
+
+
+def replace_invalid_str(text, replacement=' '):
+	return re.sub(r'^\+|[?|$|!|#]', replacement, text)
 
 
 def get_dburi(db_path, type='', **kwargs):
@@ -163,24 +167,26 @@ def get_id(g, label, lang='en', idns='', prdns=[], idprds={}):
 			%s .
 			FILTER regex(str(?c), "%s", "i")
 			FILTER langMatches(lang(?c), "%s")}
-		''' % (where_clause, re.sub(r'^\+|[?|$|!]', r'.', label), lang)
+		''' % (where_clause, replace_invalid_str(label, ' '), lang)
 	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
 	result = g.query(q)
-	return [(row[0].strip(idns), row[1].toPython()) for row in result]
+	return [(str(row[0]), row[1].toPython()) for row in result] if idns.isspace() else [(str(row[0]).strip(idns), row[1].toPython()) for row in result if row[0].startswith(idns)]
 	
 	
 def get_label(g, id, lang='en', idns='', prdns=[], lbprds={}):
+	id, idns_str = replace_invalid_str(id, '_'), str(idns)
+	idns = Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
-	where_clause = ' UNION '.join(['''{"%s" %s ?o}''' % (id, ':'.join(p)) for p in lbprds.keys()])
+	where_clause = ' UNION '.join(['''{%s %s ?o}''' % (id if idns_str.isspace() else 'idns:'+id, ':'.join(p)) for p in lbprds.keys()])
 	# The 'i' parameter in regex function means case insensitive
 	q_str = '''
 		SELECT DISTINCT ?o WHERE { 
 			%s .
 			FILTER langMatches(lang(?o), "%s")}
 		''' % (where_clause, lang)
-	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
+	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
 	result = g.query(q)
-	return [(row[0].strip(idns), row[1].toPython()) for row in result]
+	return [row[0].toPython() for row in result]
 
 
 def slct_sim_terms(g, label, lang='en', exhausted=False, prdns=[], eqprds={}):

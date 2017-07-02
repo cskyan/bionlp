@@ -36,8 +36,7 @@ plt.rc('savefig', dpi=350)
 
 
 def gen_colors(num):
-	base_color = ['r', 'b', 'g', 'm', 'y', 'c']
-	base_color.reverse()
+	base_color = ['b', 'g', 'r', 'm', 'y', 'c']
 	base_alphas = np.linspace(0.8, 0.5, max(1, np.ceil(num / len(base_color))))
 	colors = [base_color[i % len(base_color)] for i in range(num)]
 	alphas = [base_alphas[int(i / len(base_color))] for i in range(num)]
@@ -45,7 +44,7 @@ def gen_colors(num):
 	
 	
 def gen_color_groups(num):
-	base_color = ['r', 'b', 'g', 'k', 'm', 'y', 'c']
+	base_color = ['b', 'g', 'r', 'm', 'y', 'c']
 	group_color = list(base_color)
 	group_color *= int(num / len(base_color))
 	group_color += base_color[:num % len(base_color)]
@@ -54,6 +53,21 @@ def gen_color_groups(num):
 		alphas = np.linspace(0.8, 0.5, n)
 		return colors, alphas
 	return cg
+	
+	
+def gen_colorls_groups(num):
+	base_color = ['b', 'g', 'r', 'm', 'y', 'c']
+	group_color = list(base_color)
+	group_color *= int(num / len(base_color))
+	group_color += base_color[:num % len(base_color)]
+	def clsg(m, n):
+		colors = [group_color[m]] * n
+		line_styles = ['-', '--', '-.', ':', 'steps']
+		lss = list(line_styles)
+		lss *= int(num / len(line_styles))
+		lss += line_styles[:num % len(line_styles)]
+		return colors, lss
+	return clsg
 	
 	
 def gen_markers(num):
@@ -86,7 +100,7 @@ def smooth_data(x, y, pnum=300):
 	return new_x, new_y
 
 
-def plot_roc(data, labels, groups=None, title='Receiver operating characteristic', fname='roc', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+def plot_roc(data, labels, groups=None, mltl_ls=False, title='Receiver operating characteristic', fname='roc', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 
 	fig = plt.figure()
@@ -96,13 +110,21 @@ def plot_roc(data, labels, groups=None, title='Receiver operating characteristic
 		for i in xrange(len(data)):
 			plt.plot(data[i][0], data[i][1], lw=1, label=labels[i])
 	else:
-		color_groups = gen_color_groups(len(groups))
 		glbl_id = 0
-		for i, grp in enumerate(groups):
-			colors, alphas = color_groups(i, len(grp))
-			for j, idx in enumerate(grp):
-				plt.plot(data[idx][0], data[idx][1], lw=1, label=labels[glbl_id], color=colors[j], alpha=alphas[j])
-				glbl_id += 1
+		if (mltl_ls):
+			colorls_groups = gen_colorls_groups(len(groups))
+			for i, grp in enumerate(groups):
+				colors, lss = colorls_groups(i, len(grp))
+				for j, idx in enumerate(grp):
+					plt.plot(data[idx][0], data[idx][1], lw=1, label=labels[glbl_id], color=colors[j], ls=lss[j])
+					glbl_id += 1
+		else:
+			color_groups = gen_color_groups(len(groups))
+			for i, grp in enumerate(groups):
+				colors, alphas = color_groups(i, len(grp))
+				for j, idx in enumerate(grp):
+					plt.plot(data[idx][0], data[idx][1], lw=1, label=labels[glbl_id], color=colors[j], alpha=alphas[j])
+					glbl_id += 1
 	plt.plot([0, 1], [0, 1], '--', color=(0.6, 0.6, 0.6))
 	
 	plt.xlim([-0.05, 1.05])
@@ -129,7 +151,7 @@ def plot_roc(data, labels, groups=None, title='Receiver operating characteristic
 	plt.close()
 
 
-def plot_prc(data, labels, groups=None, title='Precision recall characteristic', fname='prc', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
+def plot_prc(data, labels, groups=None, mltl_ls=False, title='Precision recall characteristic', fname='prc', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}):
 	global MON
 	
 	fig = plt.figure()
@@ -139,13 +161,21 @@ def plot_prc(data, labels, groups=None, title='Precision recall characteristic',
 		for i in xrange(len(data)):
 			plt.plot(data[i][0], data[i][1], lw=1, label=labels[i])
 	else:
-		color_groups = gen_color_groups(len(groups))
 		glbl_id = 0
-		for i, grp in enumerate(groups):
-			colors, alphas = color_groups(i, len(grp))
-			for j, idx in enumerate(grp):
-				plt.plot(data[idx][0], data[idx][1], lw=1, label=labels[glbl_id], color=colors[j], alpha=alphas[j])
-				glbl_id += 1
+		if (mltl_ls):
+			colorls_groups = gen_colorls_groups(len(groups))
+			for i, grp in enumerate(groups):
+				colors, lss = colorls_groups(i, len(grp))
+				for j, idx in enumerate(grp):
+					plt.plot(data[idx][0], data[idx][1], lw=1, label=labels[glbl_id], color=colors[j], ls=lss[j])
+					glbl_id += 1
+		else:
+			color_groups = gen_color_groups(len(groups))
+			for i, grp in enumerate(groups):
+				colors, alphas = color_groups(i, len(grp))
+				for j, idx in enumerate(grp):
+					plt.plot(data[idx][0], data[idx][1], lw=1, label=labels[glbl_id], color=colors[j], alpha=alphas[j])
+					glbl_id += 1
 	
 	plt.xlim([-0.05, 1.05])
 	plt.ylim([-0.05, 1.05])
