@@ -127,7 +127,11 @@ def span_tokenize(text):
 
 def del_punct(tokens, location=None):
 	if (location is not None):
-		return zip(*[(t, loc) for t, loc in zip(tokens, location) if t not in string.punctuation])
+		tkn_locs = [(t, loc) for t, loc in zip(tokens, location) if t not in string.punctuation]
+		if (len(tkn_locs) == 0): 
+			return [], []
+		else:
+			return zip(*tkn_locs)
 	return [t for t in tokens if t not in string.punctuation]
 	
 	

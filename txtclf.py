@@ -52,8 +52,8 @@ def get_featw(pipeline, feat_num):
 						if (hasattr(estm, measure)):
 							filt_subfeat_w = getattr(estm, measure)
 							subfeat_w = (filt_subfeat_w.min() - 1) * np.ones_like(feature_idx)
-							# subfeat_w[filt_subfeat_idx] = normalize(estm.feature_importances_.reshape(-1, 1), norm='l1')
-							subfeat_w[filt_subfeat_idx] = filt_subfeat_w.reshape(-1, 1)
+							# subfeat_w[filt_subfeat_idx] = normalize(estm.feature_importances_, norm='l1')
+							subfeat_w[filt_subfeat_idx] = filt_subfeat_w
 							# print 'Sub FI shape: (%s)' % ','.join([str(x) for x in filt_subfeat_w.shape])
 							# print 'Feature Importance inside %s Ensemble Method: %s' % (component, filt_subfeat_w)
 							sub_feat_w[(component, i)] = subfeat_w
@@ -64,8 +64,8 @@ def get_featw(pipeline, feat_num):
 					filt_feat_w = getattr(pipeline.named_steps[component], measure)
 					# print '*' * 80 + '\n%s\n'%filt_feat_w + '*' * 80
 					feat_w = (filt_feat_w.min() - 1) * np.ones_like(feature_idx)
-					# feat_w[filt_feat_idx] = normalize(filt_feat_w.reshape(-1, 1), norm='l1')
-					feat_w[filt_feat_idx] = filt_feat_w.reshape(-1, 1)
+					# feat_w[filt_feat_idx] = normalize(filt_feat_w, norm='l1')
+					feat_w[filt_feat_idx] = filt_feat_w
 					# print '*' * 80 + '\n%s\n'%feat_w + '*' * 80
 					feat_w_dict[(component, measure)] = feat_w
 					print 'FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape])
@@ -208,8 +208,8 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 						if (hasattr(estm, measure)):
 							filt_subfeat_w = getattr(estm, measure)
 							subfeat_w = (filt_subfeat_w.min() - 1) * np.ones_like(feature_idx)
-		#					subfeat_w[filt_subfeat_idx] = normalize(estm.feature_importances_.reshape(-1, 1), norm='l1')
-							subfeat_w[filt_subfeat_idx] = filt_subfeat_w.reshape(-1, 1)
+		#					subfeat_w[filt_subfeat_idx] = normalize(estm.feature_importances_, norm='l1')
+							subfeat_w[filt_subfeat_idx] = filt_subfeat_w
 							# print 'Sub FI shape: (%s)' % ','.join([str(x) for x in filt_subfeat_w.shape])
 							# print 'Feature Importance inside %s Ensemble Method: %s' % (component, filt_subfeat_w)
 							sub_feat_w[(component, i)] = subfeat_w
@@ -220,8 +220,8 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 					filt_feat_w = getattr(pipeline.named_steps[component], measure)
 #					print '*' * 80 + '\n%s\n'%filt_feat_w + '*' * 80
 					feat_w = (filt_feat_w.min() - 1) * np.ones_like(feature_idx)
-#					feat_w[filt_feat_idx] = normalize(filt_feat_w.reshape(-1, 1), norm='l1')
-					feat_w[filt_feat_idx] = filt_feat_w.reshape(-1, 1)
+#					feat_w[filt_feat_idx] = normalize(filt_feat_w, norm='l1')
+					feat_w[filt_feat_idx] = filt_feat_w
 #					print '*' * 80 + '\n%s\n'%feat_w + '*' * 80
 					feat_w_dict[(component, measure)] = feat_w
 					print 'FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape])
