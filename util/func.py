@@ -70,7 +70,26 @@ def remove_duplicate(collection):
 	return list(OrderedDict.fromkeys(collection))
 	
 	
-def unique_rowcol(df, merge='del'):
+def unique_rowcol(mt, row_idx, col_idx, merge='del'):
+	unique_idx, unique_col = {}, {}
+	for i, idx in enumerate(row_idx):
+		unique_idx.setdefault(idx, []).append(i)
+	for i, col in enumerate(col_idx):
+		unique_col.setdefault(col, []).append(i)
+	duplicate_idx = flatten_list([val[1:] for val in unique_idx.values()])
+	duplicate_col = flatten_list([val[1:] for val in unique_col.values()])
+	if (merge == 'sum'):
+		for idx, ilocs in unique_idx.iteritems():
+			if (len(ilocs) == 1): continue
+			mt[ilocs[0],:] = mt[ilocs,:].sum(axis=0)
+		for col, ilocs in unique_col.iteritems():
+			if (len(ilocs) == 1): continue
+			mt[:,ilocs[0]] = mt[:,ilocs].sum(axis=1)
+	uniq_idx, uniq_col = [i for i in range(len(row_idx)) if i not in duplicate_idx], [i for i in range(len(col_idx)) if i not in duplicate_col]
+	return mt[uniq_idx,:][:,uniq_col], (len(uniq_idx), len(uniq_col)), [row_idx[i] for i in uniq_idx], [col_idx[i] for i in uniq_col]
+	
+	
+def unique_rowcol_df(df, merge='del'):
 	index, columns = df.index, df.columns
 	unique_idx, unique_col = {}, {}
 	for i, idx in enumerate(index):

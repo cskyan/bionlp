@@ -20,33 +20,57 @@ class Node(object):
 		self.left = left
 		self.right = right
 		self.parent = parent
+		
+try:
+	from ete3 import Tree
+	class ETENode(Tree):
+		def __init__(self, data={}, left=None, right=None, parent=None):
+			self.data = data
+			self.left = left
+			self.right = right
+			self.parent = parent
+			super(ETENode, self).__init__()
+		def post_build(self):
+			self.name = str(self.data.setdefault('id', ''))
+			self.children.extend([x for x in [self.left, self.right] if x is not None])
+			self.up = self.parent
+except Exception as e:
+	print e
 
-def from_childlist(node_list, order='bottom_up'):
+
+def from_childlist(node_list, order='bottom_up', node_type='normal'):
 	if (order == 'bottom_up'):
-		root = preorder_build(-1, None, node_list)
+		root = preorder_build(-1, None, node_list, node_type=node_type)
 	elif (order == 'top_down'):
-		root = preorder_build(0, None, node_list)
+		root = preorder_build(0, None, node_list, node_type=node_type)
 	return root
 		
 		
-def preorder_build(node_id, parent_node, node_list):
-	node = Node(data=node_list[node_id]['data'], parent=parent_node)
+def preorder_build(node_id, parent_node, node_list, node_type='normal'):
+	if (node_type == 'ete'):
+		node = ETENode(data=node_list[node_id]['data'], parent=parent_node)
+	else:
+		node = Node(data=node_list[node_id]['data'], parent=parent_node)
 	children = node_list[node_id]['children']
 	if (len(children) == 0):
 		node.left = None
 		node.right = None
+		if (node_type == 'ete'):
+			node.post_build()
 		return node
 	if (children[0] != -1):
-		node.left = preorder_build(children[0], node, node_list)
+		node.left = preorder_build(children[0], node, node_list, node_type=node_type)
 	else:
 		node.left = None
 	if (len(children) == 1):
 		node.right = None
 		return node
 	if (children[1] != -1):
-		node.right = preorder_build(children[1], node, node_list)
+		node.right = preorder_build(children[1], node, node_list, node_type=node_type)
 	else:
 		node.right = None
+	if (node_type == 'ete'):
+		node.post_build()
 	return node
 	
 	
@@ -57,6 +81,28 @@ def preorder_getnode(node):
 	if (node.right != None):
 		data_list.extend(preorder_getnode(node.right))
 	return data_list
+	
+	
+def preorder_search(node, cond_func, stop_found=False):
+	results = []
+	if (cond_func(node)):
+		results.append(node)
+		if (stop_found):
+			return results
+	if (node.left != None):
+		results.extend(preorder_search(node.left, cond_func, stop_found=stop_found))
+	if (node.right != None):
+		results.extend(preorder_search(node.right, cond_func, stop_found=stop_found))
+	return results
+	
+	
+def preorder_modify(node, in_func, out_func, **kwargs):
+	in_func(node, **kwargs)
+	if (node.left != None):
+		preorder_modify(node.left, in_func, out_func, **kwargs)
+	if (node.right != None):
+		preorder_modify(node.right, in_func, out_func, **kwargs)
+	out_func(node, **kwargs)
 
 
 def bottom_up(leaves, node_pair_gen=None, npg_params={}):

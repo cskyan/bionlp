@@ -28,7 +28,7 @@ elif sys.platform.startswith('linux2'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp', 'dnorm')
 	TMP_PATH = os.path.join(os.environ['TMPDIR'], 'dnorm') if (os.environ.has_key('TMPDIR') and os.path.exists(os.environ['TMPDIR'])) else '/tmp/dnorm'
 
-DNORM_HOME = os.environ['DNORM_HOME']
+DNORM_HOME = os.environ.setdefault('DNORM_HOME', 'DNorm')
 CONFIG = os.path.join(DNORM_HOME, 'config', 'banner_NCBIDisease_TEST.xml')
 LEXICON= os.path.join(DNORM_HOME, 'data', 'CTD_diseases.tsv')
 MATRIX= os.path.join(DNORM_HOME, 'output', 'simmatrix_NCBIDisease_e4.bin')

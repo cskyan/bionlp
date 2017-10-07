@@ -24,6 +24,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, KFold, GridSearchCV, RandomizedSearchCV
 from sklearn import metrics
 
+import optunity
+
 from util import io, func, plot
 import util.math as imath
 
@@ -75,7 +77,7 @@ def get_featw(pipeline, feat_num):
 
 
 def get_score(pipeline, X_test, mltl=False):
-	if ((isinstance(pipeline.named_steps['clf'], OneVsRestClassifier) and hasattr(pipeline.named_steps['clf'].estimators_[0], 'predict_proba')) or (not isinstance(pipeline.named_steps['clf'], OneVsRestClassifier) and hasattr(pipeline, 'predict_proba'))):
+	if ((not isinstance(pipeline, Pipeline) and hasattr(pipeline, 'predict_proba')) or(isinstance(pipeline.named_steps['clf'], OneVsRestClassifier) and hasattr(pipeline.named_steps['clf'].estimators_[0], 'predict_proba')) or (not isinstance(pipeline.named_steps['clf'], OneVsRestClassifier) and hasattr(pipeline, 'predict_proba'))):
 		if (mltl):
 			return pipeline.predict_proba(X_test)
 		else:
@@ -201,9 +203,9 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 		if (pipeline.named_steps.has_key(component)):
 			if (hasattr(pipeline.named_steps[component], 'estimators_')):
 				for i, estm in enumerate(pipeline.named_steps[component].estimators_):
-					filt_subfeat_idx = feature_idx[:]
+					filt_subfeat_idx = filt_feat_idx[:]
 					if (hasattr(estm, 'get_support')):
-						filt_subfeat_idx = feature_idx[estm.get_support()]
+						filt_subfeat_idx = filt_feat_idx[estm.get_support()]
 					for measure in ('feature_importances_', 'coef_', 'scores_'):
 						if (hasattr(estm, measure)):
 							filt_subfeat_w = getattr(estm, measure)
@@ -213,8 +215,6 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 							# print 'Sub FI shape: (%s)' % ','.join([str(x) for x in filt_subfeat_w.shape])
 							# print 'Feature Importance inside %s Ensemble Method: %s' % (component, filt_subfeat_w)
 							sub_feat_w[(component, i)] = subfeat_w
-			if (hasattr(component, 'get_support')):
-				filt_feat_idx = feature_idx[component.get_support()]
 			for measure in ('feature_importances_', 'coef_', 'scores_'):
 				if (hasattr(pipeline.named_steps[component], measure)):
 					filt_feat_w = getattr(pipeline.named_steps[component], measure)
@@ -227,6 +227,8 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 					print 'FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape])
 					print 'Sample 10 Feature from %s.%s: %s' % (component, measure, feat_w[feat_w > 0][:10])
 #					print 'Feature Importance from %s.%s: %s' % (component, measure, feat_w)
+			if (hasattr(pipeline.named_steps[component], 'get_support')):
+				filt_feat_idx = filt_feat_idx[pipeline.named_steps[component].get_support()]
 	print '\n'
 	if (average == 'all'):
 		return {'accuracy':accuracy, 'micro-precision':micro_precision, 'micro-recall':micro_recall, 'micro-fscore':micro_fscore, 'macro-precision':macro_precision, 'macro-recall':macro_recall, 'macro-fscore':macro_fscore, 'train_time':train_time, 'test_time':test_time, 'micro-roc':micro_roc, 'macro-roc':macro_roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':pred}
@@ -345,7 +347,7 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 			pipeline = Pipeline([('clf', clf)])
 		else:
 			model_name = mdl_name
-			pipeline = mdl
+			pipeline = mdl if (type(mdl) is Pipeline) else Pipeline([('clf', mdl)])
 		if (model_name in PL_SET): continue
 		PL_NAMES.append(model_name)
 		PL_SET.add(model_name)
@@ -592,7 +594,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	group_dict = {}
 	for i, pl in enumerate(PL_NAMES):
 		group_dict.setdefault(tuple(set(difflib.get_close_matches(pl, PL_NAMES))), []).append(i)
-	if (len(group_dict) == len(PL_NAMES)):
+	if (not cfg_param.setdefault('group_by_name', False) or len(group_dict) == len(PL_NAMES)):
 		groups = None
 	else:
 		group_array = np.array(group_dict.values())
@@ -665,6 +667,57 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_j
 		score_avg_cube[tuple(idx)] = score_avg_list[i]
 		score_std_cube[tuple(idx)] = score_std_list[i]
 	return grid.best_params_, grid.best_score_, score_avg_cube, score_std_cube, dim_names, dim_vals
+
+	
+def tune_param_optunity(mdl_name, mdl, X, Y, scoring='f1', optfunc='max', solver='grid search', params={}, mltl=False, avg='micro', n_jobs=-1):
+	struct, param_space, folds, n_iter = [params.setdefault(k, None) for k in ['struct', 'param_space', 'folds', 'n_iter']]
+	ext_params = dict.fromkeys(param_space.keys()) if (not struct) else dict.fromkeys(params.setdefault('param_names', []))
+	kwargs = dict([('num_iter', n_iter), ('num_folds', folds)]) if (type(folds) is int) else dict([('num_iter', n_iter), ('num_folds', folds.get_n_splits()), ('folds', [list(folds.split(X))] * n_iter)])
+	@optunity.cross_validated(x=X, y=Y, **kwargs)
+	def perf(x_train, y_train, x_test, y_test, **ext_params):
+		mdl.fit(x_train, y_train)
+		if (scoring == 'roc'):
+			preds = get_score(mdl, x_test, mltl)
+			if (mltl):
+				import metric as imetric
+				return imetric.mltl_roc(y_test, preds, average=avg)
+		else:
+			preds = mdl.predict(x_test)
+		score_func = getattr(optunity, scoring) if (hasattr(optunity, scoring)) else None
+		score_func = getattr(metrics, scoring+'_score') if (score_func is None and hasattr(metrics, scoring+'_score')) else score_func
+		if (score_func is None):
+			print 'Score function %s is not supported!' % scoring
+			exit(1)
+		return score_func(y_test, preds, average=avg)
+	if (optfunc == 'max'):
+		config, info, _ = optunity.maximize(perf, num_evals=n_iter, solver_name=solver, pmap=optunity.parallel.create_pmap(n_jobs), **param_space) if (not struct) else optunity.maximize_structured(perf, search_space=param_space, num_evals=n_iter, pmap=optunity.parallel.create_pmap(n_jobs))
+	elif (optfunc == 'min'):
+		config, info, _ = optunity.minimize(perf, num_evals=n_iter, solver_name=solver, pmap=optunity.parallel.create_pmap(n_jobs), **param_space) if (not struct) else optunity.minimize_structured(perf, search_space=param_space, num_evals=n_iter, pmap=optunity.parallel.create_pmap(n_jobs))
+	print("The best parameters of [%s] are %s, with a score of %0.3f" % (mdl_name, config, info.optimum))
+	cl_df = optunity.call_log2dataframe(info.call_log)
+	cl_df.to_csv('call_log.csv')
+	# Store all the parameter candidates into a dictionary of list
+	param_grid = dict([(x, sorted(set(cl_df[x]))) for x in cl_df.columns if x != 'value'])
+	param_names = param_grid.keys()
+	# Index the parameter names and valules
+	dim_names = dict([(k, i) for i, k in enumerate(param_names)])
+	dim_vals = {}
+	for pn in dim_names.keys():
+		dim_vals[pn] = dict([(k, i) for i, k in enumerate(param_grid[pn])])
+	# Create data cube
+	score_avg_cube = np.ndarray(shape=[len(param_grid[k]) for k in param_names], dtype='float') * np.nan
+	score_std_cube = np.ndarray(shape=[len(param_grid[k]) for k in param_names], dtype='float') * np.nan
+	# Calculate the score list
+	score_avg_list = cl_df['value']
+	score_std_list = np.zeros_like(cl_df['value'])
+	# Fill in the data cube
+	for i, p_option in cl_df[param_names].iterrows():
+		idx = np.zeros((len(dim_names),), dtype='int')
+		for k, v in p_option.iteritems():
+			idx[dim_names[k]] = dim_vals[k][v]
+		score_avg_cube[tuple(idx)] = score_avg_list[i]
+		score_std_cube[tuple(idx)] = score_std_list[i]
+	return config, info.optimum, score_avg_cube, score_std_cube, dim_names, dim_vals
 	
 	
 def analyze_param(param_name, score_avg, score_std, dim_names, dim_vals, best_params):
@@ -673,34 +726,3 @@ def analyze_param(param_name, score_avg, score_std, dim_names, dim_vals, best_pa
     _, slicing = zip(*func.sorted_tuples(best_param_idx.values(), key_idx=0))
     param_vals, _ = zip(*func.sorted_dict(dim_vals[param_name], key='value'))
     return np.array(param_vals), score_avg[slicing], score_std[slicing]
-
-
-def tune_param_bak(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_jobs=-1):
-	if (rdtune):
-		param_dist, n_iter = [params[k] for k in ['param_dist', 'n_iter']]
-		grid = RandomizedSearchCV(estimator=mdl, param_distributions=param_dist, n_iter=n_iter, scoring='f1_%s' % avg if mltl else 'f1', n_jobs=n_jobs, error_score=0)
-	else:
-		param_grid, cv = [params[k] for k in ['param_grid', 'cv']]
-		grid = GridSearchCV(estimator=mdl, param_grid=param_grid, scoring='f1_micro' if mltl else 'f1', cv=cv, n_jobs=n_jobs, error_score=0)
-	grid.fit(X, Y)
-	print("The best parameters of [%s] are %s, with a score of %0.3f" % (mdl_name, grid.best_params_, grid.best_score_))
-	if (rdtune):
-		param_grid = {}
-		for p_tuple in grid.grid_scores_:
-			for p_name, p_val in p_tuple[0].iteritems():
-				param_grid.setdefault(p_name, []).append(p_val)
-	else:
-		param_grid = grid.param_grid
-	dim_names = dict([(k, i) for i, k in enumerate(param_grid.keys())])
-	dim_vals = {}
-	for pn in dim_names.keys():
-		dim_vals[pn] = dict([(k, i) for i, k in enumerate(param_grid[pn])])
-	score_avg_cube = np.ndarray(shape=[len(param_grid[k]) for k in param_grid.keys()], dtype='float')
-	score_std_cube = np.ndarray(shape=[len(param_grid[k]) for k in param_grid.keys()], dtype='float')
-	for gs in grid.grid_scores_:
-		idx = np.zeros((len(dim_names),), dtype='int')
-		for k, v in gs[0].iteritems():
-			idx[dim_names[k]] = dim_vals[k][v]
-		score_avg_cube[tuple(idx)] = gs[1]
-		score_std_cube[tuple(idx)] = gs[2].std()
-	return grid.best_params_, grid.best_score_, score_avg_cube, score_std_cube, dim_names, dim_vals

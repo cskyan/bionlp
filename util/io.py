@@ -120,6 +120,34 @@ def read_df(fpath, with_col=True, with_idx=False, sparse_fmt=None):
 	return pd.DataFrame(data=mt, index=npzfile['idx'] if with_idx and len(npzfile['idx'].shape) == 1 else None, columns=npzfile['col'] if len(npzfile['col'].shape) == 1 else None)
 	
 	
+def write_spdf(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compress=False):
+	fs.mkdir(os.path.dirname(fpath))
+	fpath = os.path.splitext(fpath)[0] + '.npz'
+	if (compress):
+		save_f = np.savez_compressed
+	else:
+		save_f = np.savez
+	if (sparse_fmt == None):
+		save_f(fpath, data=df['values'], shape=df['shape'], col=df['columns'] if with_col else None, idx=df['index'] if with_idx else None)
+	elif (sparse_fmt == 'csc'):
+		sp_mt = sparse.csc_matrix(df['values'])
+		save_f(fpath, data=sp_mt.data, indices=sp_mt.indices, indptr=sp_mt.indptr, shape=sp_mt.shape, col=df['columns'] if with_col else None, idx=df['index'] if with_idx else None)
+	elif (sparse_fmt == 'csr'):
+		sp_mt = sparse.csr_matrix(df['values'])
+		save_f(fpath, data=sp_mt.data, indices=sp_mt.indices, indptr=sp_mt.indptr, shape=sp_mt.shape, col=df['columns'] if with_col else None, idx=df['index'] if with_idx else None)
+	
+	
+def read_spdf(fpath, with_col=True, with_idx=False, sparse_fmt=None):
+	npzfile = read_npz(fpath)
+	if (sparse_fmt == None):
+		mt = npzfile['data']
+	elif (sparse_fmt == 'csc'):
+		mt = sparse.csc_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape'])
+	elif (sparse_fmt == 'csr'):
+		mt = sparse.csr_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape'])
+	return dict(values=mt, shape=mt.shape, index=npzfile['idx'] if with_idx and len(npzfile['idx'].shape) == 1 else None, columns=npzfile['col'] if len(npzfile['col'].shape) == 1 else None)
+
+	
 def write_yaml(data, fpath, append=False, dfs=False):
 #	fs.mkdir(os.path.dirname(fpath))
 	fpath = os.path.splitext(fpath)[0] + '.yaml'
@@ -153,7 +181,6 @@ def param_writer(fpath):
 			except:
 				print 'Cannot writer the data: %s' % data
 				return
-			data = {}
 	return add_params
 
 	

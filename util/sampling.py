@@ -12,6 +12,22 @@
 from sklearn.cross_validation import StratifiedShuffleSplit
 
 
+def samp_df(df, n=None, frac=None, key=None, filt_func=lambda x: x, reset_idx=False):
+	if (n is None == frac is None): return df
+	if (frac is None):
+		if (key is None):
+			new_df = filt_func(df)
+			new_df = new_df.sample(n=min(n, new_df.shape[0]))
+		else:
+			new_df = filt_func(df).groupby(key).apply(lambda x: x.sample(n=min(n, x.shape[0])))
+	else:
+		if (key is None):
+			new_df = filt_func(df).sample(frac=frac)
+		else:
+			new_df = filt_func(df).groupby(key).apply(lambda x: x.sample(frac=frac))
+	return new_df.reset_index(drop=True) if reset_idx else new_df
+
+
 def samp_df_iter(X_iter, iter_size, y, size=0.5):
 	'''
 	Stratified Sampling

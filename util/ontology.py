@@ -25,6 +25,7 @@ from rdflib import Graph, Namespace
 from rdflib.plugins.sparql import prepareQuery as rprepareq
 
 from ..spider.sparql import SPARQL
+from .. import nlp
 import fs
 import func
 
@@ -46,14 +47,43 @@ OWL = Namespace('http://www.w3.org/2002/07/owl#')
 MESHV = Namespace('http://id.nlm.nih.gov/mesh/vocab#')
 OBO = Namespace('http://purl.obolibrary.org/obo/')
 OBOWL = Namespace('http://www.geneontology.org/formats/oboInOwl#')
+OMIM = Namespace('http://identifiers.org/omim/')
 DBID = Namespace('http://www.drugbank.ca/drugbank-id/')
 DBV = Namespace('http://www.drugbank.ca/vocab#')
+DGIDBV = Namespace('http://dgidb.genome.wustl.edu/vocab#')
+DGIDB_GENE = Namespace('http://dgidb.genome.wustl.edu/gene/')
+DGIDB_DRUG = Namespace('http://dgidb.genome.wustl.edu/drug/')
 
 opts, args = {}, []
 
 
-def replace_invalid_str(text, replacement=' '):
-	return re.sub(r'^\+|[?|$|!|#]', replacement, text)
+def replace_invalid_sparql_str(text, replacement=''):
+	return re.sub(r'^\+|[?|$|!|#]', replacement, nlp.clean_txt(unicode(text))).strip()
+	
+	
+def replace_invalid_str(text, replacement=''):
+	return re.sub(r'^\+|[\(|\)|\[|\]|?|$|!|#]', replacement, nlp.clean_txt(unicode(text))).strip()
+	
+
+def clean_result(db):
+	if (db == 'dgnet'):
+		def clean_dgnet(text, replacement=''):
+			return re.sub(r'\[.*\]', replacement, nlp.clean_txt(unicode(text))).strip()
+		return clean_dgnet
+	else:
+		return None
+		
+		
+def filter_result(db):
+	dbres_maxlen = {'dgidb':255}
+	max_len = dbres_maxlen.setdefault('db', 50)
+	def filter_dgidb(txt_list):
+		new_list = []
+		for txt in txt_list:
+			if (len(txt) <= max_len):
+				new_list.append(txt)
+		return new_list
+	return filter_dgidb
 
 
 def get_dburi(db_path, type='', **kwargs):
@@ -174,7 +204,7 @@ def get_id(g, label, lang='en', idns='', prdns=[], idprds={}):
 	
 	
 def get_label(g, id, lang='en', idns='', prdns=[], lbprds={}):
-	id, idns_str = replace_invalid_str(id, '_'), str(idns)
+	id, idns_str = replace_invalid_sparql_str(id, '_'), str(idns)
 	idns = Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
 	where_clause = ' UNION '.join(['''{%s %s ?o}''' % (id if idns_str.isspace() else 'idns:'+id, ':'.join(p)) for p in lbprds.keys()])
@@ -242,79 +272,6 @@ def define_mesh_fn(g, lang='en', prdns=[], eqprds={}):
 	return find_neighbors
 	
 	
-def define_obo_fn(g, type='exact', **kwargs):
-	if (type == 'exact'):
-		return define_obo_fn_exact(g, **kwargs)
-	elif (type == 'fuzzy'):
-		return define_obo_fn_fuzzy(g, **kwargs)
-	
-	
-def define_obo_fn_fuzzy(g, lang='', prdns=[], eqprds={}):
-	prepareQuery = get_prepareq(g)
-	def find_neighbors(g, vertices):
-		neighbors = []
-		for vertex in vertices:
-			if not vertex: continue
-			if (len(eqprds) == 0):
-				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
-							?s ^rdfs:label ?c1 .
-							{?c2 ?p ?c1} UNION {?c1 ?p ?c2} .
-							?c2 rdfs:label ?x . 
-							FILTER(!isBlank(?c1)) .
-							FILTER(!isBlank(?c2)) .
-							FILTER(contains(lcase(str(?s)), "%s"))
-							FILTER(lang(?s)="%s") .}
-					''' % (str(vertex).lower(), '@%s'%lang if lang else '')
-			else:
-				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
-				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
-							?s ^rdfs:label / (%s) ?o .
-							?o rdfs:label ?x .
-							FILTER(!isBlank(?o)) .
-							FILTER(contains(lcase(str(?s)), "%s"))
-							FILTER(lang(?s)="%s") .}
-					''' % (prdc_str, str(vertex).lower(), '@%s'%lang if lang else '')
-			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
-			result = g.query(q)
-			for row in result:
-				neighbors.append(row[0].toPython())
-		return neighbors
-	return find_neighbors
-	
-	
-def define_obo_fn_exact(g, lang='', prdns=[], eqprds={}):
-	prepareQuery = get_prepareq(g)
-	def find_neighbors(g, vertices):
-		neighbors = []
-		for vertex in vertices:
-			if not vertex: continue
-			if (len(eqprds) == 0):
-				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
-							"%s"%s ^rdfs:label ?c1 .
-							{?c2 ?p ?c1} UNION {?c1 ?p ?c2} .
-							?c2 rdfs:label ?x . 
-							FILTER(!isBlank(?c1)) .
-							FILTER(!isBlank(?c2)) .}
-					''' % (vertex, '@%s'%lang if lang else '')
-			else:
-				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
-				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
-							"%s"%s ^rdfs:label / (%s) ?o .
-							?o rdfs:label ?x .
-							FILTER(!isBlank(?o)) . }
-					''' % (vertex, '@%s'%lang if lang else '', prdc_str)
-			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
-			result = g.query(q)
-			for row in result:
-				neighbors.append(row[0].toPython())
-		return neighbors
-	return find_neighbors
-	
-	
 def define_meshtree_fn(g, lang='en', prdns=[], eqprds={}):
 	prepareQuery = get_prepareq(g)
 	def find_neighbors(g, vertices):
@@ -328,6 +285,138 @@ def define_meshtree_fn(g, lang='en', prdns=[], eqprds={}):
 						?c2 meshv:treeNumber ?x . }
 				''' % (vertex, '@%s'%lang if lang else ''),
 			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS), ('meshv', MESHV)]+prdns))
+			result = g.query(q)
+			for row in result:
+				neighbors.append(row[0].toPython())
+		return neighbors
+	return find_neighbors
+	
+	
+def define_fn(g, type='exact', has_id=True, **kwargs):
+	if (type == 'exact'):
+		return define_fn_exact(g, **kwargs) if has_id else define_fn_exact_noid(g, **kwargs)
+	elif (type == 'fuzzy'):
+		return define_fn_fuzzy(g, **kwargs) if has_id else define_fn_fuzzy_noid(g, **kwargs)
+	
+	
+def define_fn_fuzzy(g, lang='', idns=[], prdns=[], eqprds={}):
+	prepareQuery = get_prepareq(g)
+	def find_neighbors(g, vertices):
+		neighbors = []
+		for vertex in vertices:
+			if not vertex: continue
+			if (len(eqprds) == 0):
+				q_str = '''
+						SELECT DISTINCT ?x WHERE { 
+							?s ^rdfs:label ?c1 .
+							{?c2 ?p ?c1} UNION {?c1 ?p ?c2} .
+							?c2 rdfs:label ?x . 
+							FILTER(!isBlank(?c1)) .
+							FILTER(!isBlank(?c2)) .
+							FILTER(regex(?s, "%s", "i")) .
+							FILTER(lang(?s)="%s") .}
+					''' % (replace_invalid_str(vertex), '%s'%lang if lang else '')
+			else:
+				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
+				q_str = '''
+						SELECT DISTINCT ?x WHERE { 
+							?s ^rdfs:label / (%s) ?o .
+							?o rdfs:label ?x .
+							FILTER(!isBlank(?o)) .
+							FILTER(regex(?s, "%s", "i")) .
+							FILTER(lang(?s)="%s") .}
+					''' % (prdc_str, replace_invalid_str(vertex), '%s'%lang if lang else '')
+			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+idns+prdns))
+			result = g.query(q)
+			if (not result): continue
+			for row in result:
+				neighbors.append(row[0].toPython())
+		return neighbors
+	return find_neighbors
+	
+	
+def define_fn_exact(g, lang='', idns=[], prdns=[], eqprds={}):
+	prepareQuery = get_prepareq(g)
+	def find_neighbors(g, vertices):
+		neighbors = []
+		for vertex in vertices:
+			if not vertex: continue
+			if (len(eqprds) == 0):
+				q_str = '''
+						SELECT DISTINCT ?x WHERE { 
+							"%s"%s ^rdfs:label ?c1 .
+							{?c2 ?p ?c1} UNION {?c1 ?p ?c2} .
+							?c2 rdfs:label ?x . 
+							FILTER(!isBlank(?c1)) .
+							FILTER(!isBlank(?c2)) .}
+					''' % (replace_invalid_str(vertex), '@%s'%lang if lang else '')
+			else:
+				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
+				q_str = '''
+						SELECT DISTINCT ?x WHERE { 
+							"%s"%s ^rdfs:label / (%s) ?o .
+							?o rdfs:label ?x .
+							FILTER(!isBlank(?o)) . }
+					''' % (replace_invalid_str(vertex), '@%s'%lang if lang else '', prdc_str)
+			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+idns+prdns))
+			result = g.query(q)
+			for row in result:
+				neighbors.append(row[0].toPython())
+		return neighbors
+	return find_neighbors
+	
+	
+def define_fn_fuzzy_noid(g, lang='', idns=[], prdns=[], eqprds={}):
+	prepareQuery = get_prepareq(g)
+	def find_neighbors(g, vertices):
+		neighbors = []
+		for vertex in vertices:
+			if not vertex: continue
+			if (len(eqprds) == 0):
+				q_str = '''
+						SELECT DISTINCT ?x WHERE { 
+							{?c ?p ?x} UNION {?x ?p ?c} .
+							FILTER(!isBlank(?x)) .
+							FILTER(regex(str(?c), "%s", "i")) .}
+					''' % replace_invalid_str(vertex)
+			else:
+				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
+				q_str = '''
+						SELECT DISTINCT ?x WHERE { 
+							?c (%s) ?x .
+							FILTER(!isBlank(?x)) .
+							FILTER(regex(str(?c), "%s", "i")) .}
+					''' % (prdc_str, replace_invalid_str(vertex))
+			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+idns+prdns))
+			result = g.query(q)
+			for row in result:
+				neighbors.append(row[0].toPython())
+		return neighbors
+	return find_neighbors
+	
+	
+def define_fn_exact_noid(g, lang='', idns=[], prdns=[], eqprds={}):
+	prepareQuery = get_prepareq(g)
+	def find_neighbors(g, vertices):
+		neighbors = []
+		for vertex in vertices:
+			if not vertex: continue
+			if (len(eqprds) == 0):
+				q_str = '''
+						SELECT DISTINCT ?x WHERE { 
+							{?c ?p ?x} UNION {?x ?p ?c} .
+							FILTER(str(?c)="%s") .
+							FILTER(!isBlank(?x)) .}
+					''' % replace_invalid_str(vertex)
+			else:
+				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
+				q_str = '''
+						SELECT DISTINCT ?x WHERE { 
+							?c (%s) ?x .
+							FILTER(str(?c)="%s") .
+							FILTER(!isBlank(?x)) .}
+					''' % (prdc_str, replace_invalid_str(vertex))
+			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+idns+prdns))
 			result = g.query(q)
 			for row in result:
 				neighbors.append(row[0].toPython())
@@ -390,7 +479,7 @@ def transitive_closure_sg(g, vertices, find_neighbors=_default_fn, max_length=10
 	
 	
 # Transitive Closure in Dynamic Subgraph
-def transitive_closure_dsg(g, vertices, find_neighbors=_default_fn, filter=None, min_length=1, max_length=100):
+def transitive_closure_dsg(g, vertices, find_neighbors=_default_fn, filter=None, cleaner=None, min_length=1, max_length=5):
 	vertices = list(set(vertices))
 	if (len(vertices) == 0):
 		return coo_matrix([], dtype='int64')
@@ -406,7 +495,9 @@ def transitive_closure_dsg(g, vertices, find_neighbors=_default_fn, filter=None,
 			neighbors = set(find_neighbors(g, neighbor_record[i][-1])) - neighbor_set[i]
 			# Filter the vertices
 			if (filter is not None):
-				neighbors = filter(neighbors)
+				neighbors = set(filter(neighbors))
+			if (cleaner is not None):
+				neighbors = set(map(cleaner, neighbors))
 			# Update the neighbor record queue, neighbor distance, whole neighbor set (leave overlap for later calculation)
 			del neighbor_record[i][0]
 			neighbor_record[i].append(neighbors)

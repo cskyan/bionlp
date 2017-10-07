@@ -170,7 +170,6 @@ def freqs(X, Y, min_t=1, max_t=None, scaled=True):
 	
 	
 def decision_tree(X, Y, scaled=True):
-	from sklearn.feature_selection import SelectFromModel
 	from sklearn.tree import DecisionTreeClassifier
 	filter = DecisionTreeClassifier(criterion='entropy', class_weight='balanced', random_state=0)
 	filter.fit(X, Y)
@@ -183,8 +182,8 @@ def decision_tree(X, Y, scaled=True):
 
 
 def filtref(cur_f, ref_f, ori_f=None):
-	cur_X, ref_X = io.read_df(cur_f, sparse_fmt='csc'), io.read_df(ref_f, sparse_fmt='csc')
-	ori_X = io.read_df(ori_f, sparse_fmt='csc') if ori_f is not None else None
+	cur_X, ref_X = io.read_df(cur_f, with_idx=True, sparse_fmt='csr'), io.read_df(ref_f, with_idx=True, sparse_fmt='csr')
+	ori_X = io.read_df(ori_f, sparse_fmt='csr') if ori_f is not None else None
 	fi_df = pd.DataFrame([[1] * cur_X.shape[1]], columns=cur_X.columns)
 	if (ori_f is None):
 		filtout = list(set(cur_X.columns) - set(ref_X.columns))

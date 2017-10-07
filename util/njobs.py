@@ -58,11 +58,10 @@ def run(target, **kwargs):
 	p.join()
 
 
-def run_pool(target, n_jobs=1, dist_param=[], **kwargs):
+def run_pool(target, n_jobs=1, pool=None, ret_pool=False, dist_param=[], **kwargs):
 	res_list, fix_kwargs, iter_kwargs = [], {}, {}
-	def collect_res(res):
-		res_list.append(res)
-	pool = Pool(processes=n_jobs)
+	if (pool is None):
+		pool = Pool(processes=n_jobs)
 	# Separate iterable arguments and singular arguments
 	for k, v in kwargs.iteritems():
 		if (k in dist_param and hasattr(v, '__iter__')):
@@ -73,19 +72,36 @@ def run_pool(target, n_jobs=1, dist_param=[], **kwargs):
 	for argv in zip(*iter_kwargs.values()):
 		args = dict(zip(iter_kwargs.keys(), argv))
 		args.update(fix_kwargs)
-		pool.apply_async(target, kwds=args, callback=collect_res)
+		r = pool.apply_async(target, kwds=args)
+		res_list.append(r)
+	if (ret_pool):
+		res_list = [r.get() for r in res_list]
+		time.sleep(0.01)
+		return res_list, pool
 	pool.close()
 	pool.join()
 	return res_list
 	
 	
-def run_ipp(target, n_jobs=1, dist_param=[], **kwargs):
-	import ipyparallel as ipp
+def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kwargs):
 	from subprocess import Popen
-	pstart = Popen(['ipcluster', 'start', '-n', '%i' % n_jobs])
-	time.sleep(5)
+	import ipyparallel as ipp
+	use_client = False
+	if (client):
+		if (type(client) is str and not client.isspace()):
+			try:
+				c = ipp.Client(profile=client, timeout=5)
+				use_client = True
+			except Exception as e:
+				print 'Failed to connect to the ipcluster with profile_%s' % client
+		elif (type(client) is ipp.Client):
+			c = client
+			use_client = True
 	try:
-		c = ipp.Client(timeout=5)
+		if (not use_client):
+			pstart = Popen(['ipcluster', 'start', '-n', '%i' % n_jobs])
+			time.sleep(8)
+			c = ipp.Client(timeout=5)
 		res_list, fix_kwargs, iter_kwargs = [], {}, {}
 		# Separate iterable arguments and singular arguments
 		for k, v in kwargs.iteritems():
@@ -100,20 +116,28 @@ def run_ipp(target, n_jobs=1, dist_param=[], **kwargs):
 			r = c[c.ids[i % len(c.ids)]].apply_async(target, **args)
 			res_list.append(r)
 		if c.wait(res_list):
+			time.sleep(0.01)
 			results = [r.get() for r in res_list]
 		else:
 			print 'No results return!'
 			results = []
-		c.shutdown(hub=True)
-		pstart.terminate()
-		pend = Popen(['ipcluster', 'stop'])
-		time.sleep(5)
-		pend.terminate()
-		return results
+		if (not use_client):
+			c.shutdown(hub=True)
+			pstart.terminate()
+			pend = Popen(['ipcluster', 'stop'])
+			time.sleep(5)
+			pend.terminate()
+			return results
+		elif (ret_client):
+			return results, c
+		else:
+			c.close()
+			return results
 	except Exception as e:
 		print e
-		pstart.terminate()
-		pend = Popen(['ipcluster', 'stop'])
-		time.sleep(5)
-		pend.terminate()
+		if (not use_client):
+			pstart.terminate()
+			pend = Popen(['ipcluster', 'stop'])
+			time.sleep(5)
+			pend.terminate()
 		return []

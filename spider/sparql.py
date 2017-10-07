@@ -13,8 +13,11 @@ import os
 import re
 import sys
 import json
+import time
+import socket
 import codecs
 import hashlib
+import urllib2
 
 from rdflib import URIRef, Variable
 from rdflib.query import ResultRow
@@ -30,11 +33,18 @@ SC=';;'
 		
 		
 class SPARQL(object):
-	def __init__(self, endpoint, use_cache=False):
+	def __init__(self, endpoint, timeout=1, use_cache=False):
+		self.endpoint = endpoint
 		self.sparql = SPARQLWrapper(endpoint)
+		self.timeout = timeout
+		if (timeout is not None):
+			self.sparql.setTimeout(timeout)
+			socket.setdefaulttimeout(timeout)
 		self.use_cache = use_cache
 		if (use_cache):
+			from pymemcache.client.base import Client
 			self.memcached = ('localhost', 11211)
+			self.client = Client(self.memcached, serializer=cache.mmc_json_srlz, deserializer=cache.mmc_json_desrlz)
 		
 	@classmethod
 	def prepareQuery(cls, q_str, initNs={}):
@@ -42,31 +52,39 @@ class SPARQL(object):
 		for k, v in initNs.iteritems():
 			prefix.append('PREFIX %s: <%s>' % (k, v))
 		return '\n'.join(prefix) + '\n' + q_str
-		
+
 	def query(self, q):
 		results = None
 		if (self.use_cache):
 			q_hash = hashlib.md5(q).hexdigest()
-			from pymemcache.client.base import Client
-			client = Client(self.memcached, serializer=cache.mmc_json_srlz, deserializer=cache.mmc_json_desrlz)
 			try:
-				cache_res = client.get(q_hash)
+				cache_res = self.client.get(q_hash)
 				if (cache_res is not None):
 					q_str, results = cache_res
-					if (q.strip().lower() != q_str.strip().lower()):
+					if (q.strip().lower() != q_str.strip().lower() or not results):
 						results = None
+					else:
+						# print 'Query: %s\nCached results: %s' % (q_str, results)
+						pass
 			except Exception as e:
 				print e
 		if (results is None):
-			self.sparql.setQuery(q)
-			self.sparql.setReturnFormat(JSON)
-			results = self.sparql.query().convert()
+			succeeded, start = False, time.time()
+			while (not succeeded and results is None and (self.timeout is None or time.time()-start<self.timeout)):
+				try:
+					self.sparql.setQuery(q)
+					self.sparql.setReturnFormat(JSON)
+					results = self.sparql.query().convert()
+				except Exception as e:
+					print e
+				succeeded = True
 			if (self.use_cache):
 				try:
-					client.set(q_hash, (q, results))
+					self.client.set(q_hash, (q, results))
 				except Exception as e:
 					print e
 		result_rows = []
+		if (not results): return []
 		for result in results['results']['bindings']:
 			rr_list, rr_dict = [], {}
 			for k, v in result.iteritems():

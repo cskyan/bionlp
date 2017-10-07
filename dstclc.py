@@ -49,12 +49,15 @@ def parallel_pairwise(X, Y, func, n_jobs=1, symmetric=False, min_chunksize=1, **
 	return np.hstack(ret)
 
 
-def normdist(D):
+def normdist(D, range=None):
 	flatten_D = D.ravel()
 	minimum, maximum = flatten_D.min(), flatten_D.max()
 	if (minimum == maximum):
 		return np.ones_like(D)
-	return (D - minimum) / (maximum - minimum)
+	if (range is None):
+		return (D - minimum) / (maximum - minimum)
+	else:
+		return (range[1] - range[0]) * (D - minimum) / (maximum - minimum) + range[0]
 
 
 def sji_func(x, y):

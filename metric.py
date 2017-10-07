@@ -31,7 +31,7 @@ def mltl_roc(y_true, y_pred, average='micro'):
 def micro_roc(y_true, scores):
 	if (len(scores.shape) == 3):
 		scores = scores[:,:,1].reshape((scores.shape[0],scores.shape[1],))
-	if (y_true.shape[0] == scores.shape[1] and y_true.shape[1] == scores.shape[0]):
+	if (y_true.shape[0] != y_true.shape[1] and y_true.shape[0] == scores.shape[1] and y_true.shape[1] == scores.shape[0]):
 		scores = scores.T
 	fpr, tpr, thrshd = metrics.roc_curve(y_true.ravel(), scores.ravel())
 	roc_auc = metrics.auc(fpr, tpr)

@@ -372,7 +372,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		clt_num, clt_lbs = connected_components(dok_MST)
 		clts = [tuple(np.where(clt_lbs==x)[0]) for x in np.unique(clt_lbs)]
 		minor_clusters = dict([(clt, 0) for clt in clts if len(clt) > 1])
-		minor_clts = minor_clusters.keys()
+		self.minor_clts_ = minor_clts = minor_clusters.keys()
 		# print minor_clts
 		## Convert the distance matrix into similarity matrix
 		SIM_NNG = NNG.copy()
@@ -380,31 +380,43 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		## Calculate the similarity and distance matrix of minor clusters
 		sim_rirc, ec, mec = self._rirc(SIM_NNG, minor_clts)
 		sim_rirc = dstclc.normdist(sim_rirc)
-		dist_rirc = 1 - sim_rirc
+		self.dist_rirc_ = dist_rirc = 1 - sim_rirc
 		## Merge the clusters by hierarchical clustering
 		conn = (sim_rirc > 0.5).view(dtype='int8')
-		aggl_clt = AgglomerativeClustering(connectivity=conn, affinity='precomputed', memory='/dev/shm', linkage='complete')
+		self.aggl_clt_ = aggl_clt = AgglomerativeClustering(connectivity=conn, affinity='precomputed', memory='/dev/shm', linkage='complete')
 		aggl_clt.fit(dist_rirc)
-		vset, cand_clts, conds = set(range(SIM_NNG.shape[0])), minor_clts[:], [10]*len(minor_clts)
+		vset, all_clts, cand_clts, all_conds, conds, filtered = set(range(SIM_NNG.shape[0])), minor_clts[:], minor_clts[:], [10]*len(minor_clts), [10]*len(minor_clts), [False for x in minor_clts]
 		for l, r in aggl_clt.children_:
-			merged_clt = cand_clts[l] + cand_clts[r]
-			clt_array, cmp_clt_array = np.array(merged_clt), np.array(list(vset - set(merged_clt)))
+			merged_clt = all_clts[l] + all_clts[r]
+			# clt_array, cmp_clt_array = np.array(merged_clt), np.array(list(vset - set(merged_clt)))
 			edge_cut = self._cut_val(SIM_NNG, [merged_clt], method='mincut')
 			# Calculate the conductance of each merged cluster to help determine whether it should be kept
 			conductance = self._conductance(SIM_NNG, vset, merged_clt)
 			if (conductance > self.cond):
 				cand_clts.append(merged_clt)
 				conds.append(conductance)
+				filtered.append(False)
+			else:
+				filtered.append(True)
+			all_clts.append(merged_clt)
+			all_conds.append(conductance)
+		## Save the hierarchical tree
+		children_list = [[]] * len(minor_clts) + aggl_clt.children_.tolist()
+		parent_list = [-1 for x in range(len(children_list))]
+		for i, children in enumerate(children_list):
+			for child in children:
+				parent_list[child] = i
+		node_list = [dict(children=children, data=dict(id=i, pid=pid, clt=clt, cond=cond, filt=filt)) for i, pid, clt, children, cond, filt in zip(range(len(all_clts)), parent_list, all_clts, children_list, all_conds, filtered)]
+		# Construct binary tree
+		try:
+			clt_tree = bintree.from_childlist(node_list, order='bottom_up', node_type='ete')
+		except Exception as e:
+			print e
+			print 'Cannot save the hierarchical tree as ETE format, use binary tree instead!'
+			clt_tree = bintree.from_childlist(node_list, order='bottom_up')
+		io.write_obj(clt_tree, '%s_hrc_tree.pkl' % self.mdl_name)
 		## Cross merge clusters over the hierarchical tree
 		if (self.cross_merge):
-			children_list = [[]] * len(minor_clts) + aggl_clt.children_.tolist()
-			parent_list = [-1 for x in range(len(children_list))]
-			for i, children in enumerate(children_list):
-				for child in children:
-					parent_list[child] = i
-			# Construct binary tree
-			node_list = [dict(children=children, data=dict(id=i, pid=pid, clt=clt, cond=cond)) for i, pid, clt, children, cond in zip(range(len(cand_clts)), parent_list, cand_clts, children_list, conds)]
-			clt_tree = bintree.from_childlist(node_list, order='bottom_up')
 			merged_nodes = self._cross_merge(clt_tree, SIM_NNG, vset)
 			mn_dict = dict([(tuple(set(k)), v) for k, v in merged_nodes])
 			if (len(mn_dict) > 0):
