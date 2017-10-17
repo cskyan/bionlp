@@ -200,7 +200,7 @@ def pred_ovl(preds, pred_true=None, axis=1):
 def clustering(X, model_iter, model_param={}, cfg_param={}, global_param={}, lbid=''):
 	global common_cfg
 	FILT_NAMES, CLT_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_cltnames'], global_param['pl_names'], global_param['pl_set']
-	lbidstr = ('_' + str(lbid) if lbid != -1 else 'all') if lbid is not None and lbid != '' else lbid
+	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else lbid
 	
 	# Format the data
 	if (type(X) != pd.DataFrame):

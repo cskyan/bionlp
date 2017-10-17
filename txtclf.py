@@ -24,8 +24,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, KFold, GridSearchCV, RandomizedSearchCV
 from sklearn import metrics
 
-import optunity
-
 from util import io, func, plot
 import util.math as imath
 
@@ -670,6 +668,7 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_j
 
 	
 def tune_param_optunity(mdl_name, mdl, X, Y, scoring='f1', optfunc='max', solver='grid search', params={}, mltl=False, avg='micro', n_jobs=-1):
+	import optunity
 	struct, param_space, folds, n_iter = [params.setdefault(k, None) for k in ['struct', 'param_space', 'folds', 'n_iter']]
 	ext_params = dict.fromkeys(param_space.keys()) if (not struct) else dict.fromkeys(params.setdefault('param_names', []))
 	kwargs = dict([('num_iter', n_iter), ('num_folds', folds)]) if (type(folds) is int) else dict([('num_iter', n_iter), ('num_folds', folds.get_n_splits()), ('folds', [list(folds.split(X))] * n_iter)])

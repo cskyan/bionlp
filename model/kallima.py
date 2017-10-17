@@ -102,6 +102,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		## Build the nearest neighbor graph
 		if (self.nn_method == 'rnn'):
 			self.NNG_ = NNG = radius_neighbors_graph(D, self.nn_param, mode='distance', metric='precomputed', n_jobs=self.n_jobs)
+			if (NNG.nonzero()[0].shape[0] <= 2): self.NNG_ = NNG = kneighbors_graph(D, 4, mode='distance', metric='precomputed', n_jobs=self.n_jobs)
 		else:
 			self.NNG_ = NNG = kneighbors_graph(D, self.nn_param, mode='distance', metric='precomputed', n_jobs=self.n_jobs)
 		## Cluster based on the nearest neighbor graph
@@ -314,7 +315,6 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 			parent = parent.parent
 		return merged_nodes
 
-	@iprofile
 	def _mst_cut(self, NNG):
 		## Build the minimum spanning tree
 		self.MST_ = MST = minimum_spanning_tree(NNG)
@@ -382,8 +382,11 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		sim_rirc = dstclc.normdist(sim_rirc)
 		self.dist_rirc_ = dist_rirc = 1 - sim_rirc
 		## Merge the clusters by hierarchical clustering
-		conn = (sim_rirc > 0.5).view(dtype='int8')
-		self.aggl_clt_ = aggl_clt = AgglomerativeClustering(connectivity=conn, affinity='precomputed', memory='/dev/shm', linkage='complete')
+		# conn = (sim_rirc > 0.5).view(dtype='int8')
+		conn = np.zeros_like(sim_rirc, dtype='int8')
+		conn[sim_rirc > 0.5] = 1
+		num_comp, comp_lbs = connected_components(conn)
+		self.aggl_clt_ = aggl_clt = AgglomerativeClustering(connectivity=conn, affinity='precomputed' if num_comp==1 else 'euclidean', memory='/dev/shm', linkage='complete')
 		aggl_clt.fit(dist_rirc)
 		vset, all_clts, cand_clts, all_conds, conds, filtered = set(range(SIM_NNG.shape[0])), minor_clts[:], minor_clts[:], [10]*len(minor_clts), [10]*len(minor_clts), [False for x in minor_clts]
 		for l, r in aggl_clt.children_:
