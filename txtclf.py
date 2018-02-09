@@ -9,6 +9,7 @@
 ###########################################################################
 #
 
+import sys
 import difflib
 from time import time
 
@@ -686,7 +687,7 @@ def tune_param_optunity(mdl_name, mdl, X, Y, scoring='f1', optfunc='max', solver
 		score_func = getattr(metrics, scoring+'_score') if (score_func is None and hasattr(metrics, scoring+'_score')) else score_func
 		if (score_func is None):
 			print 'Score function %s is not supported!' % scoring
-			exit(1)
+			sys.exit(1)
 		return score_func(y_test, preds, average=avg)
 	if (optfunc == 'max'):
 		config, info, _ = optunity.maximize(perf, num_evals=n_iter, solver_name=solver, pmap=optunity.parallel.create_pmap(n_jobs), **param_space) if (not struct) else optunity.maximize_structured(perf, search_space=param_space, num_evals=n_iter, pmap=optunity.parallel.create_pmap(n_jobs))

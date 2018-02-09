@@ -2,7 +2,7 @@
 # -*- coding=utf-8 -*-
 ###########################################################################
 # Copyright (C) 2013-2016 by Caspar. All rights reserved.
-# File Name: func.py
+# File Name: py
 # Author: Shankai Yan
 # E-mail: sk.yan@my.cityu.edu.hk
 # Created Time: 2016-04-27 22:15:45
@@ -14,6 +14,18 @@ import difflib
 import operator
 import itertools
 from collections import OrderedDict
+
+from sklearn.multiclass import OneVsRestClassifier
+
+
+def build_model(mdl_func, mdl_t, mdl_name, tuned=False, pr=None, mltl=False, mltp=True, **kwargs):
+	if (tuned and bool(pr)==False):
+		print 'Have not provided parameter writer!'
+		return None
+	if (mltl):
+		return OneVsRestClassifier(mdl_func(**update_dict(pr(mdl_t, mdl_name) if tuned else {}, kwargs)), n_jobs=-1) if (mltp) else OneVsRestClassifier(mdl_func(**update_dict(pr(mdl_t, mdl_name) if tuned else {}, kwargs)))
+	else:
+		return mdl_func(**update_dict(pr(mdl_t, mdl_name) if tuned else {}, kwargs))
 
 
 def find_substr(text):
@@ -113,9 +125,10 @@ def update_dict(dict1, dict2):
 	
 	
 def flatten_list(nested_list):
-	l = list(itertools.chain.from_iterable(nested_list))
+	if not hasattr(nested_list, '__iter__') or isinstance(nested_list, basestring): return nested_list
+	l = list(itertools.chain.from_iterable(x if hasattr(x, '__iter__') and not isinstance(x, basestring) else [x] for x in nested_list))
 	if (len(l) == 0): return []
-	if (type(l[0]) is list):
+	if (any([type(j) is list for j in l])):
 		return flatten_list(l)
 	else:
 		return l

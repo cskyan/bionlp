@@ -15,41 +15,40 @@ from multiprocessing import Process, Pool
 import numpy as np
 
 
-def split_1d(task_num, split_num=None, task_size=None, split_size=None):
+def split_1d(task_num, split_num=None, task_size=None, split_size=None, ret_idx=False):
 	if (split_num is None):
 		if (task_size is None or split_size is None):
-			return [1] * task_num
+			return range(task_num+1) if ret_idx else [1] * task_num
 		group_size = max(1, split_size / task_size)
 		split_num = task_num / group_size
 		remainder = task_num % group_size
-		if (remainder == 0): return [group_size] * split_num
-		return [group_size] * split_num + [remainder]
+		results = [group_size] * split_num if (remainder == 0) else [group_size] * split_num + [remainder]
 	else:
 		group_size = task_num / split_num
 		remainder = task_num % split_num
-		if (remainder == 0): return [group_size] * split_num
-		lgroup_size = group_size + 1
-		return [lgroup_size] * remainder + [group_size] * (split_num - remainder)
+		results = [group_size] * split_num if (remainder == 0) else [group_size + 1] * remainder + [group_size] * (split_num - remainder)
+	return np.cumsum([0]+results).tolist() if ret_idx else results
 		
 		
-def split_2d(task_grid, split_num=None, task_size=None, split_size=None):
+def split_2d(task_grid, split_num=None, task_size=None, split_size=None, ret_idx=False):
 	if (split_num is None):
 		if (task_size is None or split_size is None):
-			return [[1] * task_grid[0], [1] * task_grid[1]]
+			return [range(task_grid[0]+1), range(task_grid[1])+1] if ret_idx else [[1] * task_grid[0], [1] * task_grid[1]]
 		group_size = max(1, split_size / task_size)
 		factor = (1.0 * group_size / np.product(task_grid))**0.5
 		_grid = np.array(task_grid) * factor
 		grid = _grid.round().astype('int')
 		if np.product(grid) < np.product(_grid):
 			grid[(_grid % 1).argmax()] += 1
-		return [split_1d(task_grid[0], task_size=1, split_size=grid[0]), split_1d(task_grid[1], task_size=1, split_size=grid[1])]
+		results = [split_1d(task_grid[0], task_size=1, split_size=grid[0]), split_1d(task_grid[1], task_size=1, split_size=grid[1])]
 	else:
 		factor = (1.0 * split_num / np.product(task_grid))**0.5
 		_grid = np.array(task_grid) * factor
 		grid = _grid.round().astype('int')
 		if np.product(grid) < np.product(_grid):
 			grid[(_grid % 1).argmax()] += 1
-		return [split_1d(task_grid[0], split_num=grid[0]), split_1d(task_grid[1], split_num=grid[1])]
+		results = [split_1d(task_grid[0], split_num=grid[0]), split_1d(task_grid[1], split_num=grid[1])]
+	return [np.cumsum([0]+results[0]).tolist(), np.cumsum([0]+results[1]).tolist()] if ret_idx else results
 		
 
 def run(target, **kwargs):
@@ -74,9 +73,9 @@ def run_pool(target, n_jobs=1, pool=None, ret_pool=False, dist_param=[], **kwarg
 		args.update(fix_kwargs)
 		r = pool.apply_async(target, kwds=args)
 		res_list.append(r)
+	res_list = [r.get() for r in res_list]
+	time.sleep(0.01)
 	if (ret_pool):
-		res_list = [r.get() for r in res_list]
-		time.sleep(0.01)
 		return res_list, pool
 	pool.close()
 	pool.join()

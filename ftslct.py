@@ -10,6 +10,7 @@
 #
 
 import os
+import sys
 
 import numpy as np
 import scipy as sp
@@ -242,7 +243,7 @@ def lasso_path(spdr):
 	Xs, Ys = hoc.get_mltl_npz([pid], mltlx=False)
 	if (Ys == None):
 		print 'Can not find the data file!'
-		exit(1)
+		sys.exit(1)
 	X = Xs[0]
 	y = Ys[0]
 	

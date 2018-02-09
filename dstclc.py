@@ -84,9 +84,9 @@ def z_dist(X):
 	
 	
 def cns_dist(X, C=None, metric='euclidean', a=0.5, n_jobs=1, **kwargs):
-	D1 = pdist(X, metric=metric, n_jobs=n_jobs, **kwargs)
-	if (C is None): return D1
-	D2 = z_dist(C)
+	D1 = pdist(np.nan_to_num(X), metric=metric, n_jobs=n_jobs, **kwargs)
+	if (C is None): return normdist(D1)
+	D2 = z_dist(np.nan_to_num(C))
 	return (1 - a) * normdist(D1) + a * normdist(D2)
 	
 	

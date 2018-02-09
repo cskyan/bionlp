@@ -11,6 +11,7 @@
 
 import os
 import re
+import sys
 import codecs
 import StringIO
 import cStringIO
@@ -30,11 +31,11 @@ def read_file(fpath, code='ascii'):
 		if (code.lower() == 'ascii'):
 			with open(fpath, 'r') as fd:
 				for line in fd.readlines():
-					data_str.append(line.strip())
+					data_str.append(line)
 		else:
 			with codecs.open(fpath, mode='r', encoding=code, errors='ignore') as fd:
 				for line in fd.readlines():
-					data_str.append(line.strip())
+					data_str.append(line)
 	except Exception as e:
 		print e
 		print 'Can not open the file \'%s\'!' % fpath
@@ -66,7 +67,7 @@ def write_file(content, fpath, code='ascii'):
 	except Exception as e:
 		print e
 		print 'Can not write to the file \'%s\'!' % fpath
-		exit(-1)
+		sys.exit(-1)
 		
 		
 def write_files(contents, fpaths, code='ascii'):

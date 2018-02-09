@@ -10,7 +10,7 @@
 #
 
 import time
-import subprocess
+import subprocess, shlex
 
 
 def daemon(cmd, proc_name, interval=3):
@@ -22,8 +22,9 @@ def daemon(cmd, proc_name, interval=3):
 
 	
 def check_numproc(proc_name):
-	ps = subprocess.Popen('ps -ef'.split(), stdout=subprocess.PIPE)
-	grep = subprocess.Popen(['grep', proc_name], stdin=ps.stdout, stdout=subprocess.PIPE)
-	wc = subprocess.Popen('wc -l'.split(), stdin=grep.stdout, stdout=subprocess.PIPE)
-	numproc = int(wc.communicate()[0]) - 1
+	ps = subprocess.Popen(shlex.split('ps -ef'), stdout=subprocess.PIPE)
+	grep = subprocess.Popen(shlex.split('grep %s'%proc_name), stdin=ps.stdout, stdout=subprocess.PIPE)
+	grepv = subprocess.Popen(shlex.split('grep -v grep --color=auto'), stdin=grep.stdout, stdout=subprocess.PIPE)
+	wc = subprocess.Popen(shlex.split('wc -l'), stdin=grepv.stdout, stdout=subprocess.PIPE)
+	numproc = int(wc.communicate()[0])
 	return numproc

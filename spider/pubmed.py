@@ -23,13 +23,17 @@ if sys.platform.startswith('win32'):
 elif sys.platform.startswith('linux2'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 ABS_PATH = os.path.join(DATA_PATH, 'abstracts')
+BASE_URL = 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
 SC=';;'
 
 
 class PubMedBuilder():
 	def __init__(self):
-		self.tag = ''
+		self._tag = ''
+		self._tag_stack = []
 		self.id = ''
+		self.journal = ''
+		self.year = ''
 		self.title = ''
 		self.authors = []
 		self.abs_list = []
@@ -38,33 +42,37 @@ class PubMedBuilder():
 		self.chemicals = []
 		
 	def start(self, tag, attrib):
-		self.tag = tag
+		self._tag = tag
+		self._tag_stack.append(self._tag)
 		# Process the attributes
-#		if (tag == 'MedlineCitation'):
-#			owner = attrib['Owner']
-#			print owner
 	
 	def end(self, tag):
-		pass
+		self._tag_stack.pop()
 		
 	def data(self, data):
 		if data.isspace():
 			return
 		data = data.strip()
 		# Process the text content
-		if (self.tag == 'PMID'):
+		if (self._tag == 'PMID'):
 			self.id = data
-		if (self.tag == 'ArticleTitle'):
+		if (self._tag == 'Title' and self._tag_stack[-2] == 'Journal'):
+			self.journal = data
+		if (self._tag == 'Year' and self._tag_stack[-2] == 'PubDate'):
+			self.year = data
+		if (self._tag == 'ArticleTitle'):
 			self.title = data
-		if (self.tag == 'AbstractText'):
+		if (self._tag == 'AbstractText'):
 			self.abs_list.append(data)
 			#print codecs.encode(data, 'utf8')
-		if (self.tag == 'Keyword'):
+		if (self._tag == 'Keyword'):
 			self.keywords.append(data)
-		if (self.tag == 'DescriptorName'):
-			self.mesh_headings.append(data)
-		if (self.tag == 'NameOfSubstance'):
-			self.chemicals.append(data)
+		if (self._tag == 'DescriptorName'):
+			if (self._tag_stack[-2] == 'MeshHeading'):
+				self.mesh_headings.append(data)
+		if (self._tag == 'NameOfSubstance'):
+			if (self._tag_stack[-2] == 'Chemical'):
+				self.chemicals.append(data)
 		
 	def close(self):
 		pass
@@ -74,8 +82,7 @@ class PubMedBuilder():
 
 
 def get_pmids(ss, max_num=1000):
-	base = 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
-	url = base + "esearch.fcgi?db=pubmed&term=" + urllib.quote(ss) + "&rettype=abstract&retmode=text&usehistory=y&retmax=%i" % (max_num)
+	url = BASE_URL + "esearch.fcgi?db=pubmed&term=" + urllib.quote(ss) + "&rettype=abstract&retmode=text&usehistory=y&retmax=%i" % (max_num)
 	print "Search String:\n" + url + '\n'
 	res = urllib2.urlopen(url).read()
 
@@ -86,8 +93,7 @@ def get_pmids(ss, max_num=1000):
 	
 def fetch_abs(pmid_list, saved_path=ABS_PATH):
 	fs.mkdir(saved_path)
-	
-	url = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=" + ','.join(pmid_list)
+	url = BASE_URL + "efetch.fcgi?db=pubmed&retmode=xml&id=" + ','.join(pmid_list)
 	print "Fetch String:\n" + url + '\n'
 	res = urllib2.urlopen(url).read()
 	
@@ -104,7 +110,7 @@ def fetch_abs(pmid_list, saved_path=ABS_PATH):
 
 
 def fetch_artcls(pmid_list, saved_path=DATA_PATH):
-	url = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=" + ','.join(pmid_list)
+	url = BASE_URL + "efetch.fcgi?db=pubmed&retmode=xml&id=" + ','.join(pmid_list)
 	print "Fetch String:\n" + url + '\n'
 	res = urllib2.urlopen(url).read()
 	

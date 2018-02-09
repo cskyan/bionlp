@@ -65,7 +65,6 @@ class GSEBuilder():
 	
 	def end(self, tag):
 		self._tag_stack.pop()
-		pass
 		
 	def data(self, data):
 		if data.isspace():
@@ -227,13 +226,14 @@ class GSMBuilder():
 			self.scan_protocol = data		
 		if (self.view != 'full'): return
 		if (self._tag == 'Name' and self.enter_dt and self.enter_col):
-			self.col_name.append(data)
+			self.col_name.append(data.upper())
 		if (self._tag == 'Internal-Data'):
 			data_sio = StringIO('\n'.join(['\t'.join(self.col_name), data.replace('\"', '')]))
 			if (self.df is None):
 				self.df = pd.read_csv(data_sio, sep='\t', header=0, index_col=0, na_values=['null']).fillna(value=0)
 			else:
-				self.df = self.df.append(pd.read_csv(data_sio, sep='\t', header=0, index_col=0, na_values=['null']).fillna(value=0))
+				df = pd.read_csv(data_sio, sep='\t', header=0, index_col=0, na_values=['null']).fillna(value=0)
+				self.df = self.df.append(df)
 			
 		
 	def close(self):
@@ -243,7 +243,108 @@ class GSMBuilder():
 		return {'platform':self.platform,'db':self.db, 'submit_date':self.submit_date, 'release_date':self.release_date, 'last_update':self.last_update, 'id':self.id, 'ftype':self.ftype, 'title':self.title, 'description':self.description, 'data_processing':self.data_processing, 'type':self.type, 'source':self.source, 'organism':self.organism, 'tissue':self.tissue, 'tissue_type':self.tissue_type, 'treat_protocol':self.treat_protocol, 'growth_protocol':self.growth_protocol, 'extract_protocol':self.extract_protocol, 'label_protocol':self.label_protocol, 'label':self.label, 'hybrid_protocol':self.hybrid_protocol, 'scan_protocol':self.scan_protocol, 'trait':';'.join(self.trait), 'data':self.df}
 		
 		
-BUILDER_MAP = {'gse':GSEBuilder, 'gsm':GSMBuilder}
+class GPLBuilder():
+#	__metaclass__ = ABCMeta
+
+	def __init__(self, view='brief'):
+		self.view = view
+		self._tag = ''
+		self._tag_stack = []
+		self.submit_date = ''
+		self.release_date = ''
+		self.last_update = ''
+		
+		self.id = ''	# GEO Accession
+		self.title = ''
+		self.description = ''
+		self.tech = ''
+		self.organism = ''
+		self.manufacturer = ''
+		
+		# Internal data
+		self.enter_plfm = False
+		self.enter_dt = False
+		self.enter_col = False
+		self.col_pos = []
+		self.col_name = []
+		self.col_desc = {}
+		self.row_num = 0
+		self.df = None
+		
+	def start(self, tag, attrib):
+		self._tag = tag.split('}')[1] if '}' in tag else tag # Remove the namespace
+		self._tag_stack.append(self._tag)
+		# Process the attributes
+		if (self._tag == 'Platform'):
+			self.id = attrib['iid']
+			self.enter_plfm = True
+
+		if (self.view != 'full'): return
+		if (self._tag == 'Data-Table'):
+			self.enter_dt = True
+		if (self._tag == 'Column'):
+			self.enter_col = True
+			if (self.enter_dt):
+				self.col_pos.append(int(attrib['position']))
+
+		if (self._tag == 'Internal-Data' and self.enter_dt):
+			self.row_num = int(attrib['rows'])
+	
+	def end(self, tag):
+		self._tag = tag.split('}')[1] if '}' in tag else tag # Remove the namespace
+		self._tag_stack.pop()
+		if (self._tag == 'Platform'):
+			self.enter_plfm = False
+		if (self.view != 'full'): return
+		if (self._tag == 'Data-Table'):
+			self.enter_dt = False
+		if (self._tag == 'Column'):
+			self.enter_col = False
+		
+	def data(self, data):
+		if data.isspace(): return
+		data = data.strip()
+		# Process the text content
+		if (self._tag == 'Submission-Date'):
+			self.submit_date = data
+		if (self._tag == 'Release-Date'):
+			self.release_date = data
+		if (self._tag == 'Last-Update-Date'):
+			self.last_update = data
+
+		if (self._tag == 'Title' and self.enter_plfm):
+			self.title = data
+		if (self._tag == 'Description' and self.enter_plfm):
+			self.description = data
+		if (self._tag == 'Technology' and self.enter_plfm):
+			self.tech = data
+		if (self._tag == 'Organism' and self.enter_plfm):
+			self.organism = data
+		if (self._tag == 'Manufacturer' and self.enter_plfm):
+			self.manufacturer = data	
+	
+		if (self.view != 'full'): return
+		if (self._tag == 'Name' and self.enter_dt and self.enter_col):
+			self.col_name.append(data.upper())
+		if (self._tag == 'Description' and self.enter_dt and self.enter_col):
+			self.col_desc[self.col_pos[-1]] = data
+		if (self._tag == 'Internal-Data'):
+			data_sio = StringIO('\n'.join(['\t'.join(self.col_name), data.replace('\"', '')]))
+			if (self.df is None):
+				self.df = pd.read_csv(data_sio, sep='\t', header=0, index_col=0, na_values=['null']).fillna(value=0)
+			else:
+				df = pd.read_csv(data_sio, sep='\t', header=0, index_col=0, na_values=['null']).fillna(value=0)
+				self.df = self.df.append(df)
+			
+		
+	def close(self):
+		pass
+
+	def build(self):
+		return {'submit_date':self.submit_date, 'release_date':self.release_date, 'last_update':self.last_update, 'id':self.id, 'title':self.title, 'description':self.description, 'tech':self.tech, 'organism':self.organism, 'manufacturer':self.manufacturer, 'col_desc':[self.col_desc[i] if self.col_desc.has_key(i) else '' for i in self.col_pos], 'data':self.df}
+		
+		
+BUILDER_MAP = {'gse':GSEBuilder, 'gsm':GSMBuilder, 'gpl':GPLBuilder}
 
 
 def fetch_geo(accessions, type='self', view='full', fmt='xml', saved_path=GEO_PATH):
@@ -284,7 +385,6 @@ def parse_geo(geo_fpath, view='brief', type='gse', fmt='xml'):
 	
 def parse_geos(geo_fpaths, view='brief', type='gse', fmt='xml'):
 	Builder = BUILDER_MAP[type]
-	results = []
 	for i, geo_str in enumerate(fs.read_files(geo_fpaths)):
 		builder = Builder(view=view)
 		parser = xmlextrc.get_parser(builder)
@@ -294,5 +394,4 @@ def parse_geos(geo_fpaths, view='brief', type='gse', fmt='xml'):
 			print 'Can not parse the file: %s' % geo_fpaths[i]
 			raise err
 		parser.close()
-		results.append(builder.build())
-	return results
+		yield builder.build()

@@ -310,6 +310,9 @@ def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, f
 	global MON
 	fmt = plot_cfg.setdefault('fmt', fmt)
 	style = plot_cfg.setdefault('style', style)
+	xlabel_fontsize = plot_cfg.setdefault('xlabel_fontsize', 20)
+	ylabel_fontsize = plot_cfg.setdefault('ylabel_fontsize', 20)
+	title_fontsize = plot_cfg.setdefault('title_fontsize', 20)
 	
 	if (style is not None):
 		plt.style.use(style)
@@ -324,10 +327,10 @@ def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, f
 		y = mlab.normpdf(bins, data.mean(), data.std())
 		l = plt.plot(bins, y, 'r--', linewidth=1)
 	handle_refline(ax, ref_lines)
-	plt.xlabel(xlabel, fontsize=20)
-	plt.ylabel(ylabel, fontsize=20)
+	plt.xlabel(xlabel, fontsize=xlabel_fontsize)
+	plt.ylabel(ylabel, fontsize=ylabel_fontsize)
 	if (not plot_cfg.setdefault('notitle', False)):
-		plt.title(title.title(), fontsize=20)
+		plt.title(title.title(), fontsize=title_fontsize)
 	plt.grid(True)
 	
 	new_annot = {}
