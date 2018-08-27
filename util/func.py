@@ -9,10 +9,7 @@
 ###########################################################################
 #
 
-import copy
-import difflib
-import operator
-import itertools
+import copy, difflib, operator, itertools, functools
 from collections import OrderedDict
 
 from sklearn.multiclass import OneVsRestClassifier
@@ -26,6 +23,25 @@ def build_model(mdl_func, mdl_t, mdl_name, tuned=False, pr=None, mltl=False, mlt
 		return OneVsRestClassifier(mdl_func(**update_dict(pr(mdl_t, mdl_name) if tuned else {}, kwargs)), n_jobs=-1) if (mltp) else OneVsRestClassifier(mdl_func(**update_dict(pr(mdl_t, mdl_name) if tuned else {}, kwargs)))
 	else:
 		return mdl_func(**update_dict(pr(mdl_t, mdl_name) if tuned else {}, kwargs))
+
+
+def wrapped_partial(func, *args, **kwargs):
+    partial_func = functools.partial(func, *args, **kwargs)
+    functools.update_wrapper(partial_func, func)
+    return partial_func
+		
+		
+def partial_ret(func, ret_idx, other_res):
+	def partial_func(**kwargs):
+		res_list = func(**kwargs)
+		results = []
+		for i, res in enumerate(res_list):
+			if i in ret_idx:
+				results.append(res)
+			else:
+				other_res.append(res)
+		return results if len(ret_idx) > 1 else results[0]
+	return partial_func
 
 
 def find_substr(text):
@@ -45,10 +61,22 @@ def find_substr(text):
 
 def strsim(a, b):
 	return difflib.SequenceMatcher(None, a, b).ratio()
+	
+	
+def alignstrs(str_list, ref_list, ret_all=True, ret_idx=False):
+	str_set, ref_set = set(str_list), set(ref_list)
+	overlap = str_set & ref_set
+	remain = str_set - ref_set
+	return [x for x in ref_list if x in overlap] + [x for x in str_list if x in remain]
+	
 
 def capital_first(text):
 	new_txt = text[0].upper() + text[1:]
 	return new_txt
+	
+	
+def padding_list(a, length, dummy=''):
+	return a + [dummy] * (length - len(a)) if length > len(a) else a[:length]
 	
 	
 def conserved_title(text):

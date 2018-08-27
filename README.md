@@ -1,2 +1,3 @@
-# bionlp
-Biomedical Text Mining (BioNLP) Library
+# Biomedical Text Mining (BioNLP) Library
+
+`BioNLP` is a Python library for Biomedical Natural Language Processing. It aims at providing multiple functions for biomedical knowledge discovery from the textual data. It bridges the gap between the biomedical specialistic analysis and general data analysis. It makes use of the NLP techniques to extract knowledge from biomedical textual data which is hard to be understood by normal data scientists. The extracted knowledge can be a set of categorical data, an interaction network, lucid summary of an export-oriented document, or an answer to a biomedical question. As a result, the general data analysis method can be applied to the derived data.

@@ -10,16 +10,14 @@
 #
 
 from __future__ import division
-import os
-import sys
-import platform
+import os, sys, platform, pkgutil, itertools
 
 import numpy as np
 import scipy as sp
 import pandas as pd
 import matplotlib as mpl
 if (platform.system() == 'Linux'):
-	mpl.use('Agg')
+	if (mpl.get_backend() != 'module://ipykernel.pylab.backend_inline' and not globals().has_key('plt')): mpl.use('Agg')
 	# If you are using GTK windows manager, please un-comment the following line
 	# mpl.use('GTKAgg')
 import matplotlib.pyplot as plt
@@ -32,8 +30,9 @@ MON = False
 BASE_COLOR = ['b', 'g', 'r', 'y', 'c', 'm']
 
 # Font config
-plt.rc('savefig', dpi=400)
+plt.rc('savefig', dpi=600)
 #plt.rc('text', usetex=True)
+SC = ';;'
 
 
 def mix_white(colors, ratio=0.1):
@@ -102,28 +101,59 @@ def gen_markers(num):
 	return markers
 	
 	
-def handle_annot(fig, annotator, annotation):
+def handle_annot(fig, annotator, annotation, annr_props={}, annn_props={}):
 	global MON
 	if (annotator is not None):
-		annotator(axes=fig.get_axes(), draggable=True, display='one-per-axes', formatter='({x:.0f},{y:.0f})'.format, bbox=None, arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=.2'))
+		annotator(axes=fig.get_axes(), draggable=True, display='one-per-axes', formatter='({x:.0f},{y:.0f})'.format, bbox=None, arrowprops=annr_props.setdefault('arrow', dict(arrowstyle='->', connectionstyle='arc3,rad=.2')))
 		MON=True
 	if (len(annotation) > 0):
 		for point, text in annotation.items():
-			fig.get_axes()[0].annotate(text, xy=point, xycoords='data', xytext=(-15, +30), textcoords='offset points', fontsize=20, arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2"))
-			
-			
-def handle_refline(ax, ref_lines, colors={}):
+			fig.get_axes()[0].annotate(text, xy=point, xycoords='data', xytext=annn_props.setdefault('xytext', (-15, +30)), textcoords='offset points', fontsize=annn_props.setdefault('fontsize', 20), arrowprops=annn_props.setdefault('arrow', dict(arrowstyle='->', connectionstyle='arc3,rad=.2')))
+
+
+def handle_refline(ax, ref_lines, **kwargs):
+	def _setdefault_param(params, param_name, default_value, length):
+		param_values = kwargs.setdefault(param_name, [default_value] * length)
+		param_values = param_values if type(param_values) is list else [param_values]
+		param_values = func.padding_list(param_values, length, param_values[-1])
+		return param_values
 	if (len(ref_lines) > 0):
+		# Vertical lines
 		x_lines = ref_lines.setdefault('x', [])
+		x_lines = x_lines if type(x_lines) is list else [x_lines]
 		if (len(x_lines) > 0):
-			x_colors = colors.setdefault('x', ['c'] * len(x_lines))
-			for x, color in zip(x_lines, x_colors):
-				ax.axvline(x=x, c=color, ls='--')
+			# x_colors = kwargs.setdefault('xcolors', ['c'] * len(x_lines))
+			# x_colors = x_colors if type(x_colors) is list else [x_colors]
+			# x_colors = func.padding_list(x_colors, len(x_lines), x_colors[-1])
+			x_colors = _setdefault_param(kwargs, 'xcolors', 'c', len(x_lines))
+			x_widths = _setdefault_param(kwargs, 'xwidths', '2', len(x_lines))
+			for x, color, width in zip(x_lines, x_colors, x_widths):
+				ax.axvline(x=x, c=color, ls='--', linewidth=width)
+		# Horizontal lines
 		y_lines = ref_lines.setdefault('y', [])
+		y_lines = y_lines if type(y_lines) is list else [y_lines]
 		if (len(y_lines) > 0):
-			y_colors = colors.setdefault('y', ['r'] * len(y_lines))
-			for y, color in zip(y_lines, y_colors):
-				ax.axhline(y=y, c=color, ls='--')
+			# y_colors = kwargs.setdefault('ycolors', ['r'] * len(y_lines))
+			# y_colors = y_colors if type(y_colors) is list else [y_colors]
+			# y_colors = func.padding_list(y_colors, len(y_lines), y_colors[-1])
+			y_colors = _setdefault_param(kwargs, 'ycolors', 'r', len(y_lines))
+			y_widths = _setdefault_param(kwargs, 'ywidths', '2', len(y_lines))
+			for y, color, width in zip(y_lines, y_colors, y_widths):
+				ax.axhline(y=y, c=color, ls='--', linewidth=width)
+		# Curves
+		curves = ref_lines.setdefault('c', [])
+		curves = curves if type(curves) is list else [curves]
+		if (len(curves) > 0):
+			# c_colors = kwargs.setdefault('ccolors', ['y'] * len(curves))
+			# c_colors = c_colors if type(c_colors) is list else [c_colors]
+			# c_colors = func.padding_list(c_colors, len(curves), c_colors[-1])
+			c_colors = _setdefault_param(kwargs, 'ccolors', 'y', len(curves))
+			c_widths = _setdefault_param(kwargs, 'cwidths', '2', len(curves))
+			for curve, color, width in zip(curves, c_colors, c_widths):
+				try:
+					ax.plot(curve['x'], curve['y'], c=color, linewidth=width)
+				except:
+					pass
 			
 			
 def smooth_data(x, y, pnum=300):
@@ -178,7 +208,7 @@ def plot_roc(data, labels, groups=None, mltl_ls=False, title='Receiver operating
 	plt.xlabel('False positive rate'.title(), fontsize=15)
 	plt.ylabel('True positive rate'.title(), fontsize=15)
 	
-	plt.legend(loc="lower right", prop={'size':plot_cfg.setdefault('legend_fontsize', 8)})
+	plt.legend(loc="lower right", ncol=plot_cfg.setdefault('lgnd_ncol', 1), prop={'size':plot_cfg.setdefault('lgnd_fontsize', 8)})
 
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
@@ -238,7 +268,7 @@ def plot_prc(data, labels, groups=None, mltl_ls=False, title='Precision recall c
 	plt.xlabel('Recall'.title(), fontsize=15)
 	plt.ylabel('Precision'.title(), fontsize=15)
 	
-	plt.legend(loc="lower left", prop={'size':plot_cfg.setdefault('legend_fontsize', 8)})
+	plt.legend(loc="lower left", prop={'size':plot_cfg.setdefault('lgnd_fontsize', 8)})
 
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
@@ -282,7 +312,7 @@ def plot_bar(avg, std, xlabels, labels=None, title='Scores of mean and standard 
 	plt.ylabel('Scores'.title(), fontsize=15)
 	
 	if (labels != None):
-		plt.legend([bar_list[0] for bar_list in bars_list], labels, loc="upper right", prop={'size':plot_cfg.setdefault('legend_fontsize', 8)})
+		plt.legend([bar_list[0] for bar_list in bars_list], labels, loc="upper right", prop={'size':plot_cfg.setdefault('lgnd_fontsize', 8)})
 
 	def autolabel(bars):
 		for bar in bars:
@@ -306,7 +336,7 @@ def plot_bar(avg, std, xlabels, labels=None, title='Scores of mean and standard 
 	plt.close()
 	
 	
-def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, fit_line=False, title='Histogram', fname='hist', fmt='png', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}, **kwargs):
+def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, scale=(None, None), fit_line=False, title='Histogram', fname='hist', fmt='png', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}, **kwargs):
 	global MON
 	fmt = plot_cfg.setdefault('fmt', fmt)
 	style = plot_cfg.setdefault('style', style)
@@ -320,9 +350,13 @@ def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, f
 	fig = plt.figure()
 	ax = plt.axes()
 
-	params = dict(facecolor='green', alpha=0.75)
+	params = dict(bins=max(10, min(20, int(data.max()))), facecolor='green', alpha=0.75)
 	params.update(kwargs)
-	n, bins, patch = plt.hist(data, max(10, min(20, int(data.max()))), normed=normed, cumulative=cumulative, log=log, **params)
+	if (scale[0]):
+		ax.set_xscale(scale[0], basex=10)
+	if (scale[1]):
+		ax.set_yscale(scale[1], basey=10)
+	n, bins, patch = plt.hist(data, normed=normed, cumulative=cumulative, log=scale[1]=='log', **params)
 	if (fit_line):
 		y = mlab.normpdf(bins, data.mean(), data.std())
 		l = plt.plot(bins, y, 'r--', linewidth=1)
@@ -331,7 +365,7 @@ def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, f
 	plt.ylabel(ylabel, fontsize=ylabel_fontsize)
 	if (not plot_cfg.setdefault('notitle', False)):
 		plt.title(title.title(), fontsize=title_fontsize)
-	plt.grid(True)
+	plt.grid(plot_cfg.setdefault('grid', True))
 	
 	new_annot = {}
 	for point, text in annotation.items():
@@ -343,7 +377,7 @@ def plot_hist(data, xlabel, ylabel, normed=False, cumulative=False, log=False, f
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
 	if (plot_cfg.setdefault('save_npz', False)):
-		io.write_npz(dict(func='plot_hist', data=data, xlabel=xlabel, ylabel=ylabel, normed=normed, cumulative=cumulative, log=log, fit_line=fit_line, title=title, **params), fname)
+		io.write_npz(dict(func='plot_hist', data=data, xlabel=xlabel, ylabel=ylabel, normed=normed, cumulative=cumulative, scale=scale, fit_line=fit_line, title=title, **params), fname)
 	
 	plt.tight_layout()
 	handle_annot(fig, annotator, annotation)
@@ -377,7 +411,7 @@ def plot_2hist(data1, data2, xlabel, ylabel, normed=False, cumulative=False, log
 	ax.set_yticklabels(['0.5', '1'])
 	if (not plot_cfg.setdefault('notitle', False)):
 		plt.title(title.title(), fontsize=20)
-	plt.grid(True)
+	plt.grid(plot_cfg.setdefault('grid', True))
 
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
@@ -395,7 +429,7 @@ def plot_2hist(data1, data2, xlabel, ylabel, normed=False, cumulative=False, log
 	plt.close()
 	
 	
-def plot_scat(data, xlabel, ylabel, scale=(None, None), title='Scatter', fname='scat', fmt='png', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}, **kwargs):
+def plot_scat(data, xlabel, ylabel, groups=None, scale=(None, None), title='Scatter', fname='scat', fmt='png', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}, annr_props={}, annn_props={}, **kwargs):
 	global MON
 	fmt = plot_cfg.setdefault('fmt', fmt)
 	style = plot_cfg.setdefault('style', style)
@@ -411,15 +445,45 @@ def plot_scat(data, xlabel, ylabel, scale=(None, None), title='Scatter', fname='
 	if (scale[0]):
 		ax.set_xscale(scale[0], basex=10)
 	if (scale[1]):
-		ax.set_yscale(scale[1], basex=10)
-	
-	plt.scatter(data[:,0], data[:,1], **params)
+		ax.set_yscale(scale[1], basey=10)
+	if (groups is None):
+		plt.scatter(data[:,0], data[:,1], **params)
+	else:
+		groups = pd.DataFrame(groups) if (type(groups) != pd.DataFrame) else groups
+		legends = []
+		if (len(groups.shape) > 1 and groups.shape[1] > 1):
+			major_labels, minor_labels = groups.iloc[:,0], groups.iloc[:,1]
+			uniq_major_lbs, uniq_minor_lbs = func.alignstrs(np.unique(major_labels).tolist(), plot_cfg.setdefault('lgnd_refmjrlbs', []), ret_all=True), func.alignstrs(np.unique(minor_labels).tolist(), plot_cfg.setdefault('lgnd_refmnrlbs', []), ret_all=True)
+			mjrlb_map, mnrlb_map = dict(zip(uniq_major_lbs, range(len(uniq_major_lbs)))), dict(zip(uniq_minor_lbs, range(len(uniq_minor_lbs))))
+			labels = pd.Series([SC.join(x) for x in zip(major_labels, minor_labels)], index=groups.index)
+			unq_lbs = list(np.unique(labels))
+			unq_lbs = func.alignstrs(unq_lbs, plot_cfg.setdefault('lgnd_reflbs', []), ret_all=True)
+			markers = gen_markers(len(uniq_major_lbs))
+			colors, alphas = gen_colors(len(uniq_minor_lbs))
+			for i, lb in enumerate(unq_lbs):
+				mjr, mnr = lb.split(SC)
+				sub_data = data[(major_labels == mjr) & (minor_labels == mnr)]
+				scatplt = plt.scatter(sub_data[:,0], sub_data[:,1], marker=markers[mjrlb_map[mjr]], c=colors[mnrlb_map[mnr]], alpha=alphas[mnrlb_map[mnr]], **params)
+				legends.append((scatplt, ' '.join([mnr, mjr] if plot_cfg.setdefault('lgnd_xchg', False) else [mjr, mnr]).strip()))
+		else:
+			labels = groups.iloc[:,0]
+			unq_lbs = np.unique(labels)
+			unq_lbs = func.alignstrs(unq_lbs, plot_cfg.setdefault('lgnd_reflbs', []), ret_all=True)
+			markers = gen_markers(labels.shape[0])
+			for i, lb in enumerate(unq_lbs):
+				sub_data = data[labels == lb]
+				scatplt = plt.scatter(sub_data[:,0], sub_data[:,1], marker=markers[i], **params)
+				legends.append((scatplt, lb))
+		scatplts, legendlbs = zip(*legends)
+		plt.legend(scatplts, legendlbs, scatterpoints=plot_cfg.setdefault('lgnd_size', 1), loc=plot_cfg.setdefault('lgnd_loc', 'upper right'), ncol=plot_cfg.setdefault('lgnd_ncol', 2), fontsize=plot_cfg.setdefault('lgnd_fontsize', 8), bbox_to_anchor=plot_cfg.setdefault('lgnd_bbox', None))
 	plt.xlim([data[:,0].min() - 0.05, data[:,0].max() + 0.05])
-	plt.xlabel(xlabel)
-	plt.ylabel(ylabel)
+	handle_refline(ax, ref_lines, **plot_cfg.setdefault('refl_kwargs', {}))
+	plt.xlabel(xlabel, fontsize=plot_cfg.setdefault('xlabel_fontsize', 1))
+	plt.ylabel(ylabel, fontsize=plot_cfg.setdefault('ylabel_fontsize', 1))
 	if (not plot_cfg.setdefault('notitle', False)):
 		plt.title(title.title(), fontsize=20)
-	plt.grid(True)
+	ax.set_axisbelow(True)
+	plt.grid(plot_cfg.setdefault('grid', True), c='gray', alpha=0.5, linewidth=0.8, ls='--')
 	
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
@@ -427,7 +491,7 @@ def plot_scat(data, xlabel, ylabel, scale=(None, None), title='Scatter', fname='
 		io.write_npz(dict(func='plot_scat', data=data, xlabel=xlabel, ylabel=ylabel, scale=scale, title=title, **params), fname)
 	
 	plt.tight_layout()
-	handle_annot(fig, annotator, annotation)
+	handle_annot(fig, annotator, annotation, annr_props=annr_props, annn_props=annn_props)
 	if (MON):
 		plt.show()
 	else:
@@ -450,8 +514,8 @@ def plot_violin(data, xlabel, ylabel, labels, groups=None, title='Violin Plot', 
 	params.update(dict([(k.lstrip('sns_'), v) for k, v in kwargs.iteritems() if k.startswith('sns_')]))
 	
 	if (groups is None):
-		data = np.concatenate(data, axis=1).T
-		df = pd.DataFrame(data, columns=[xlabel, ylabel])
+		all_data = np.concatenate(data, axis=0)
+		df = pd.DataFrame(all_data, columns=[xlabel, ylabel])
 		df[xlabel], df[ylabel] = df[xlabel].astype('category'), kwargs['log'] * np.log10(df[ylabel].astype('float')) if (kwargs.setdefault('log', 0) != 0) else df[ylabel].astype('float')
 		ax = sns.violinplot(x=xlabel, y=ylabel, data=df, **params)
 	else:
@@ -459,10 +523,10 @@ def plot_violin(data, xlabel, ylabel, labels, groups=None, title='Violin Plot', 
 		for i, grp in enumerate(groups):
 			max_grpmem = max(max_grpmem, len(grp))
 			for j, idx in enumerate(grp):
-				grp_labels.append([labels[glbl_id]] * data[idx].shape[1])
+				grp_labels.append([labels[glbl_id]] * data[idx].shape[0])
 				glbl_id += 1
-		data = np.concatenate([np.concatenate([data[i] for i in func.flatten_list(groups)], axis=1).T, np.array(func.flatten_list(grp_labels)).reshape((-1,1))], axis=1)
-		df = pd.DataFrame(data, columns=[xlabel, ylabel, 'groups'])
+		all_data = np.concatenate([np.concatenate([data[i] for i in func.flatten_list(groups)], axis=0), np.array(func.flatten_list(grp_labels)).reshape((-1,1))], axis=1)
+		df = pd.DataFrame(all_data, columns=[xlabel, ylabel, 'groups'])
 		df[xlabel], df[ylabel], df['groups'] = df[xlabel].astype('category'), kwargs['log'] * np.log10(df[ylabel].astype('float')) if (kwargs.setdefault('log', 0) != 0) else df[ylabel].astype('float'), df['groups'].astype('category')
 		ax = sns.violinplot(x=xlabel, y=ylabel, hue='groups', data=df, split=max_grpmem==2, **params)
 		
@@ -472,12 +536,12 @@ def plot_violin(data, xlabel, ylabel, labels, groups=None, title='Violin Plot', 
 	if (not plot_cfg.setdefault('notitle', False)):
 		plt.title(title.title(), fontsize=20)
 	legend_handles, legend_labels = ax.get_legend_handles_labels()
-	ax.legend(legend_handles, legend_labels, loc='upper center', prop={'size':plot_cfg.setdefault('legend_fontsize', 8)})
+	ax.legend(legend_handles, legend_labels, loc=plot_cfg.setdefault('lgnd_loc', 'upper center'), prop={'size':plot_cfg.setdefault('lgnd_fontsize', 8)})
 
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
 	if (plot_cfg.setdefault('save_npz', False)):
-		io.write_npz(dict(func='plot_violin', data=df, xlabel=xlabel, ylabel=ylabel, labels=labels, groups=groups, title=title, **params), fname)
+		io.write_npz(dict(func='plot_violin', data=data, xlabel=xlabel, ylabel=ylabel, labels=labels, groups=groups, title=title, **kwargs), fname)
 
 	plt.tight_layout()
 	handle_annot(fig, annotator, annotation)
@@ -512,7 +576,7 @@ def plot_param(values, score_avg, score_std, xlabel='Parameter Value', ylabel='M
 	plt.ylabel(ylabel, fontsize=15)
 	if (not plot_cfg.setdefault('notitle', False)):
 		plt.title(title.title(), fontsize=20)
-	plt.grid(True)
+	plt.grid(plot_cfg.setdefault('grid', True))
 	
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
@@ -557,7 +621,7 @@ def plot_ftnum(data, labels, marker=False, title='Micro F1 Score of default RF w
 	plt.xlabel('Number of features'.title(), fontsize=15)
 	plt.ylabel('Micro f1 score'.title(), fontsize=15)
 	
-	plt.legend(loc="upper right", prop={'size':plot_cfg.setdefault('legend_fontsize', 8)}, numpoints={'size':plot_cfg.setdefault('legend_numpoints', 1)})
+	plt.legend(loc="upper right", prop={'size':plot_cfg.setdefault('lgnd_fontsize', 8)}, numpoints={'size':plot_cfg.setdefault('legend_numpoints', 1)})
 
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
@@ -611,7 +675,7 @@ def plot_clt(data, labels, decomp=False, title='Clustering', fname='clustering',
 	plt.ylabel('$x_{2}$', fontsize=15)
 	if (not plot_cfg.setdefault('notitle', False)):
 		plt.title(title.title(), fontsize=20)
-	plt.grid(True)
+	plt.grid(plot_cfg.setdefault('grid', True))
 	
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)
@@ -675,7 +739,7 @@ def plot_fzyclt(data, labels, decomp=False, title='Clustering', fname='clusterin
 	plt.ylabel('$x_{2}$', fontsize=15)
 	if (not plot_cfg.setdefault('notitle', False)):
 		plt.title(title.title(), fontsize=20)
-	plt.grid(True)
+	plt.grid(plot_cfg.setdefault('grid', True))
 	
 	if (plot_cfg.setdefault('save_obj', False)):
 		io.write_obj(fig, fname)

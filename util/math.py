@@ -15,7 +15,7 @@ from itertools import chain, combinations, izip_longest
 import numpy as np
 from scipy import sparse
 
-import io
+import io, func
 
 
 ordinal = lambda n: "%d%s" % (n,"tsnrhtdd"[(n/10%10!=1)*(n%10<4)*n%10::4])
@@ -29,6 +29,47 @@ def grouper(n, iterable, fillvalue=None):
 	args = [iter(iterable)] * n
 	return izip_longest(*args, fillvalue=fillvalue)
 	
+	
+def array2index(array, ret_base=False):
+	dim_array = range(len(array.shape))
+	dim_array_set = set(dim_array)
+	e = np.ones(len(array.shape), dtype='int')
+	index_base = []
+	for i in dim_array:
+		dim_idx = np.copy(e)
+		dim_idx[i] = array.shape[i]
+		idx_mt = np.arange(array.shape[i]).reshape(dim_idx)
+		for j in dim_array_set - set([i]):
+			idx_mt = np.repeat(idx_mt, array.shape[i], j)
+		index_base.append(idx_mt)
+	return index_base if ret_base else np.array(np.core.records.fromarrays(index_base, names=','.join(map(lambda x: 'dim_'+str(x), range(len(index_base))))))
+	
+	
+def slice_last_axis(array, slice_array):
+	index_base = array2index(slice_array, ret_base=True)
+	idx = [x.flatten() for x in index_base] + [slice_array.flatten()]
+	return array[idx].reshape(array.shape[:-1])
+
+	
+def softmax(w, t=1.0):
+    e = np.exp(np.array(w) / t)
+    dist = e / np.sum(e)
+    return dist
+	
+	
+def mlb_clsw(Y, norm=False):
+	Y = np.array(Y).reshape((len(Y),-1))
+	clsw = (1 - Y).mean(axis=0) if norm else 1.0 / (Y.mean(axis=0) * Y.shape[1])
+	return clsw
+	
+
+def mlb_class_weight(class_weight, Y):
+	from sklearn.utils.class_weight import compute_class_weight
+	Y = np.array(Y)
+	if not (len(Y.shape) > 1 and Y.shape[1] > 1):
+		return compute_class_weight(class_weight, np.unique(Y), func.flatten_list(Y.tolist()))
+	return np.array([compute_class_weight(class_weight, np.array([0,1]), Y[:,i]) for i in range(Y.shape[1])])
+
 	
 class PearsonR(object):
 	def __init__(self, X, dtype='float32', zero_value=0, sparse_output=False, cache_path=None):

@@ -13,9 +13,13 @@ import os
 
 import scipy.stats as stats
 
-from keras import backend as K
-from keras import activations
+from keras.layers import Input, Lambda, merge
 from keras.engine.topology import Layer
+from keras.optimizers import SGD
+from keras import activations
+from keras import backend as K
+
+import kerasext
 
 
 class CFKBase(Layer):
@@ -101,3 +105,25 @@ class CFKC(CFKBase):
 	def get_output_shape_for(self, input_shape):
 		assert input_shape and len(input_shape) == 3 and len(input_shape[0]) == 2 and len(input_shape[1]) == 2 and len(input_shape[2]) == 2
 		return (input_shape[0][0], self.output_dim)
+		
+		
+# Constraint Fuzzy K-means Neural Network
+def _cfkmeans_loss(Y_true, Y):
+	import keras.backend as K
+	return K.mean(Y)
+	
+
+def cfkmeans_mdl(input_dim=1, output_dim=1, constraint_dim=0, batch_size=32, backend='th', device='', session=None, internal_dim=64, metric='euclidean', gamma=0.01, **kwargs):
+	with kerasext.gen_cntxt(backend, device):
+		X_input = Input(shape=(input_dim,), dtype=K.floatx(), name='X')
+		C_input = Input(shape=(constraint_dim,), name='CI')
+		cfku = CFKU(output_dim=output_dim, input_dim=input_dim, batch_size=batch_size, name='U', session=session)(X_input)
+		cfkd = CFKD(output_dim=output_dim, input_dim=input_dim, metric=metric, batch_size=batch_size, name='D', session=session)([X_input, cfku])
+		loss = merge([cfku, cfkd], mode='mul', name='L')
+		rglz = Lambda(lambda x: gamma * K.tanh(x), name='R')(cfku)
+		constr = CFKC(output_dim=output_dim, input_dim=input_dim, batch_size=batch_size, name='C', session=session)([C_input, cfku, cfkd])
+		J = merge([loss, rglz, constr], mode='sum', name='J')
+		model = kerasext.gen_cltmdl(context=dict(backend=backend, device=device), session=session, input=[X_input, C_input], output=[J], constraint_dim=constraint_dim)
+		optmzr = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
+		model.compile(loss=_cfkmeans_loss, optimizer=optmzr, metrics=['accuracy', 'mse'])
+	return model

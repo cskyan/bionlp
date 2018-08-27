@@ -224,14 +224,14 @@ def fetch_gene(ids, fmt='xml', buff_size=1, saved_path=GENE_PATH, ret_strio=Fals
 				for gene_id, gene_res in zip(query_ids, xmlextrc.extrc_list('Entrezgene-Set', 'Entrezgene', '.', None, res, 'xml')):
 					results[gene_id] = gene_res
 					tgt_file = os.path.join(saved_path, gene_id + '.%s' % fmt2ext[fmt])
-					fs.write_file(gene_res, tgt_file)
+					if (saved_path): fs.write_file(gene_res, tgt_file)
 		for gene_id in sub_ids:
 			if (type(results.setdefault(gene_id, '')) is list):
 				yield [StringIO(x) for x in results[gene_id]] if ret_strio else results[gene_id]
 			else:
 				yield StringIO(results[gene_id]) if ret_strio else results[gene_id]
-	if (count > 0):
-		print "Number of newly downloaded NIHGENE documents: %i\n" % count
+	# if (count > 0):
+		# print "Number of newly downloaded NIHGENE documents: %i\n" % count
 	
 	
 def parse_gene(gene_fpath, fmt='xml'):

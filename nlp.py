@@ -125,14 +125,16 @@ def span_tokenize(text):
 	return list(WhitespaceTokenizer().span_tokenize(text))
 
 
-def del_punct(tokens, location=None):
-	if (location is not None):
-		tkn_locs = [(t, loc) for t, loc in zip(tokens, location) if t not in string.punctuation]
-		if (len(tkn_locs) == 0): 
-			return [], []
-		else:
-			return zip(*tkn_locs)
-	return [t for t in tokens if t not in string.punctuation]
+# def del_punct(tokens, location=None):
+	# if (location is not None):
+		# tkn_locs = [(t, loc) for t, loc in zip(tokens, location) if t not in string.punctuation]
+		# if (len(tkn_locs) == 0): 
+			# return [], []
+		# else:
+			# return zip(*tkn_locs)
+	# return [t for t in tokens if t not in string.punctuation]
+def del_punct(tokens, ret_idx=False):
+	return zip(*[(t, i) for i, t in enumerate(tokens) if t not in string.punctuation]) if ret_idx else [t for t in tokens if t not in string.punctuation]
 	
 	
 def lemmatize(tokens, model='wordnet', **kwargs):
@@ -209,7 +211,7 @@ def set_mt_point(id, pid, relation, mt={}, tree_shape='symm'):
 	return mt
 
 
-def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cache_path=None):			
+def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cache_path=None, **kwargs):			
 	# From cache
 	if (cached_id is not None):
 		cache_path = os.path.join('.', '.parsed') if cache_path is None else cache_path
@@ -230,7 +232,7 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cac
 	if (method == 'spacy'):
 		import spacy
 		spacy_nlp = spacy.load('en')
-		doc = spacy_nlp(text)
+		doc = spacy_nlp(text, **kwargs)
 		offset = 0
 		for sent in doc.sents:
 			tokens.append([dict(str=w.text.encode('ascii', 'replace'), loc=(w.idx, w.idx + len(w)), stem=w.lemma_, pos=w.pos_, stem_pos=pos(w.lemma_)[0][1], net=w.ent_id) if w.text not in string.punctuation else dict(str=w.text, loc=(w.idx, w.idx + len(w)), stem=w.lemma_, pos=w.pos_, stem_pos=w.pos_, net=w.ent_id) for w in sent])
@@ -280,18 +282,18 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cac
 		from corenlp import StanfordCoreNLP
 		corenlp_dir = os.environ['CORENLP_DIR']
 		corenlp = StanfordCoreNLP(corenlp_dir)
-		parses = corenlp.raw_parse(text)
-		for parse in parses['sentences']:
-			tokens.append([dict(str=word[0], loc=(int(word[1]['CharacterOffsetBegin']), int(word[1]['CharacterOffsetEnd'])), stem=word[1]['Lemma'], pos=word[1]['PartOfSpeech'], stem_pos=pos([word[1]['Lemma']])[0][1], net=word[1]['NamedEntityTag']) if word[0] not in string.punctuation else dict(str=word[0], loc=(int(word[1]['CharacterOffsetBegin']), int(word[1]['CharacterOffsetEnd'])), stem=word[1]['Lemma'], pos=word[1]['PartOfSpeech'], stem_pos=word[1]['PartOfSpeech'], net=word[1]['NamedEntityTag']) for word in parse['words']])
+		sents = corenlp.raw_parse(text)
+		for sent in sents['sentences']:
+			tokens.append([dict(str=word[0], loc=(int(word[1]['CharacterOffsetBegin']), int(word[1]['CharacterOffsetEnd'])), stem=word[1]['Lemma'], pos=word[1]['PartOfSpeech'], stem_pos=pos([word[1]['Lemma']])[0][1], net=word[1]['NamedEntityTag']) if word[0] not in string.punctuation else dict(str=word[0], loc=(int(word[1]['CharacterOffsetBegin']), int(word[1]['CharacterOffsetEnd'])), stem=word[1]['Lemma'], pos=word[1]['PartOfSpeech'], stem_pos=word[1]['PartOfSpeech'], net=word[1]['NamedEntityTag']) for word in sent['words']])
 			sub_dpnd_mt, sddf = {}, None
-			for id, pid, rel in corenlp2tree(parse):
+			for id, pid, rel in corenlp2tree(sent):
 				id, pid = id - 1, pid - 1
 				set_mt_point(id, pid, rel, sub_dpnd_mt, tree_shape=tree_shape)
 			if (len(sub_dpnd_mt) > 0):
-				sdmt = dpnd_trnsfm(sub_dpnd_mt, (len(parse['words']), len(parse['words'])))
+				sdmt = dpnd_trnsfm(sub_dpnd_mt, (len(sent['words']), len(sent['words'])))
 				sddf = pd.DataFrame(sdmt.tocsr().todense())
 			dpnd_dfs.append(sddf)
-		coref = parses.setdefault('coref', [])
+		coref = sents.setdefault('coref', [])
 			
 	# Write to cache
 	if (cached_id is not None):
@@ -299,11 +301,11 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cac
 	return tokens, dpnd_dfs, coref
 
 	
-def parse_all(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cache_path=None):	
-	sf_tokens, sf_dpnd_dfs, sf_coref = parse(text, method='stanford', fmt=fmt, tree_shape=tree_shape, cached_id=cached_id, cache_path=cache_path)
+def parse_all(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cache_path=None, **kwargs):	
+	sf_tokens, sf_dpnd_dfs, sf_coref = parse(text, method=method, fmt=fmt, tree_shape=tree_shape, cached_id=cached_id, cache_path=cache_path)
 	if (method == 'stanford'):
 		return sf_tokens, sf_dpnd_dfs, sf_coref
-	tokens, dpnd_dfs, coref = parse(text, method=method, fmt=fmt, tree_shape=tree_shape, cached_id=cached_id, cache_path=cache_path)
+	tokens, dpnd_dfs, coref = parse(text, method=method, fmt=fmt, tree_shape=tree_shape, cached_id=cached_id, cache_path=cache_path, **kwargs)
 	# Coreference resolution
 	sftkns2tokens, tokens2sftkns = annot_list_align([[[token['loc']] for token in token_list] for token_list in sf_tokens], [[token['loc'] for token in token_list] for token_list in tokens], error=0)
 	coref = [[((pairs[0][0], sftkns2tokens[pairs[0][1]][pairs[0][2]][0][0], sftkns2tokens[pairs[0][1]][pairs[0][2]][0][1], sftkns2tokens[pairs[0][1]][pairs[0][3]][0][1], sftkns2tokens[pairs[0][1]][min(pairs[0][4], len(sftkns2tokens[pairs[0][1]]) - 1)][0][1]), (pairs[1][0], sftkns2tokens[pairs[1][1]][pairs[1][2]][0][0], sftkns2tokens[pairs[1][1]][pairs[1][2]][0][1], sftkns2tokens[pairs[1][1]][pairs[1][3]][0][1], sftkns2tokens[pairs[1][1]][min(pairs[1][4], len(sftkns2tokens[pairs[1][1]]) - 1)][0][1])) for pairs in crf] for crf in sf_coref] # The word offset in coreference resolution of Stanford parser may exceed the number of return tokens

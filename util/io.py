@@ -12,6 +12,8 @@
 import os
 import sys
 import yaml
+import json
+import time
 import cStringIO
 import cPickle as pickle
 import numpy as np
@@ -24,6 +26,14 @@ import fs
 def inst_print(text):
 	print(text)
 	sys.stdout.flush()
+
+def write_json(data, fpath='data.json', code='ascii'):
+	if (type(data) is not dict): data = dict(data=data)
+	fs.write_file(json.dumps(data, sort_keys=True, indent=4, separators=(',', ': ')), fpath=fpath, code=code)
+
+
+def read_json(fpath):
+	return parse_json('\n'.join(fs.read_file(fpath)))
 
 
 def parse_json(json_str):
@@ -99,7 +109,7 @@ def write_df(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compress
 		save_f = np.savez_compressed
 	else:
 		save_f = np.savez
-	if (sparse_fmt == None):
+	if (sparse_fmt == None or (type(sparse_fmt) == str and sparse_fmt.lower() == 'none')):
 		save_f(fpath, data=df.values, shape=df.shape, col=df.columns.values if with_col else None, idx=df.index.values if with_idx else None)
 	elif (sparse_fmt == 'csc'):
 		sp_mt = sparse.csc_matrix(df.values)
@@ -111,7 +121,7 @@ def write_df(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compress
 		
 def read_df(fpath, with_col=True, with_idx=False, sparse_fmt=None):
 	npzfile = read_npz(fpath)
-	if (sparse_fmt == None):
+	if (sparse_fmt == None or (type(sparse_fmt) == str and sparse_fmt.lower() == 'none')):
 		mt = npzfile['data']
 	elif (sparse_fmt == 'csc'):
 		mt = sparse.csc_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape']).todense()
@@ -127,7 +137,7 @@ def write_spdf(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compre
 		save_f = np.savez_compressed
 	else:
 		save_f = np.savez
-	if (sparse_fmt == None):
+	if (sparse_fmt == None or (type(sparse_fmt) == str and sparse_fmt.lower() == 'none')):
 		save_f(fpath, data=df['values'], shape=df['shape'], col=df['columns'] if with_col else None, idx=df['index'] if with_idx else None)
 	elif (sparse_fmt == 'csc'):
 		sp_mt = sparse.csc_matrix(df['values'])
@@ -139,13 +149,32 @@ def write_spdf(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compre
 	
 def read_spdf(fpath, with_col=True, with_idx=False, sparse_fmt=None):
 	npzfile = read_npz(fpath)
-	if (sparse_fmt == None):
+	if (sparse_fmt == None or (type(sparse_fmt) == str and sparse_fmt.lower() == 'none')):
 		mt = npzfile['data']
 	elif (sparse_fmt == 'csc'):
 		mt = sparse.csc_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape'])
 	elif (sparse_fmt == 'csr'):
 		mt = sparse.csr_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape'])
 	return dict(values=mt, shape=mt.shape, index=npzfile['idx'] if with_idx and len(npzfile['idx'].shape) == 1 else None, columns=npzfile['col'] if len(npzfile['col'].shape) == 1 else None)
+	
+	
+def df2gen(df, batch_size=32, cache_fpath='tmp_data.h5', table_id=None):
+	'''
+	Transform Pandas DataFrame into Generator
+	'''
+	if (type(df) == pd.io.parsers.TextFileReader):
+		is_iter = True
+	elif (type(df) != pd.DataFrame):
+		X = pd.DataFrame(df)
+	if (is_iter):
+		for sub_df in df:
+			yield sub_df
+	else:
+		table_id = table_id if table_id else str(int(time.time()))
+		df.to_hdf(cache_fpath, table_id, format='table', data_columns=True)
+		for sub_df in pd.read_hdf(cache_fpath, key=table_id, iterator=True, chunksize=batch_size):
+			yield sub_df
+			del sub_df
 
 	
 def write_yaml(data, fpath, append=False, dfs=False):

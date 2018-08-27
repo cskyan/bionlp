@@ -9,8 +9,7 @@
 ###########################################################################
 #
 
-import sys
-import difflib
+import os, sys, difflib, itertools
 from time import time
 
 import numpy as np
@@ -19,11 +18,12 @@ import scipy.stats as stats
 import pandas as pd
 
 from sklearn.base import clone
-from sklearn.preprocessing import MinMaxScaler, LabelBinarizer, normalize
+from sklearn.preprocessing import MinMaxScaler, LabelBinarizer, label_binarize, normalize
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, KFold, GridSearchCV, RandomizedSearchCV
 from sklearn import metrics
+from keras.utils.io_utils import HDF5Matrix
 
 from util import io, func, plot
 import util.math as imath
@@ -43,35 +43,43 @@ def get_featw(pipeline, feat_num):
 	feat_w_dict, sub_feat_w = [{} for i in range(2)]
 	filt_feat_idx = feature_idx = np.arange(feat_num)
 	for component in ('featfilt', 'clf'):
-		if (pipeline.named_steps.has_key(component)):
-			if (hasattr(pipeline.named_steps[component], 'estimators_')):
-				for i, estm in enumerate(pipeline.named_steps[component].estimators_):
-					filt_subfeat_idx = feature_idx[:]
-					if (hasattr(estm, 'get_support')):
-						filt_subfeat_idx = feature_idx[estm.get_support()]
-					for measure in ('feature_importances_', 'coef_', 'scores_'):
-						if (hasattr(estm, measure)):
-							filt_subfeat_w = getattr(estm, measure)
-							subfeat_w = (filt_subfeat_w.min() - 1) * np.ones_like(feature_idx)
-							# subfeat_w[filt_subfeat_idx] = normalize(estm.feature_importances_, norm='l1')
-							subfeat_w[filt_subfeat_idx] = filt_subfeat_w
-							# print 'Sub FI shape: (%s)' % ','.join([str(x) for x in filt_subfeat_w.shape])
-							# print 'Feature Importance inside %s Ensemble Method: %s' % (component, filt_subfeat_w)
-							sub_feat_w[(component, i)] = subfeat_w
-			if (hasattr(component, 'get_support')):
-				filt_feat_idx = feature_idx[component.get_support()]
-			for measure in ('feature_importances_', 'coef_', 'scores_'):
-				if (hasattr(pipeline.named_steps[component], measure)):
-					filt_feat_w = getattr(pipeline.named_steps[component], measure)
-					# print '*' * 80 + '\n%s\n'%filt_feat_w + '*' * 80
-					feat_w = (filt_feat_w.min() - 1) * np.ones_like(feature_idx)
-					# feat_w[filt_feat_idx] = normalize(filt_feat_w, norm='l1')
-					feat_w[filt_feat_idx] = filt_feat_w
-					# print '*' * 80 + '\n%s\n'%feat_w + '*' * 80
-					feat_w_dict[(component, measure)] = feat_w
-					print 'FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape])
-					print 'Sample 10 Feature from %s.%s: %s' % (component, measure, feat_w[feat_w > 0][:10])
-					# print 'Feature Importance from %s.%s: %s' % (component, measure, feat_w)
+		if (type(pipeline) != Pipeline):
+			if (component == 'featfilt'):
+				continue
+			else:
+				cmpn = pipeline
+		elif (pipeline.named_steps.has_key(component)):
+			cmpn = pipeline.named_steps[component]
+		else:
+			continue
+		if (hasattr(cmpn, 'estimators_')):
+			for i, estm in enumerate(cmpn.estimators_):
+				filt_subfeat_idx = feature_idx[:]
+				if (hasattr(estm, 'get_support')):
+					filt_subfeat_idx = feature_idx[estm.get_support()]
+				for measure in ('feature_importances_', 'coef_', 'scores_'):
+					if (hasattr(estm, measure)):
+						filt_subfeat_w = getattr(estm, measure)
+						subfeat_w = (filt_subfeat_w.min() - 1) * np.ones_like(feature_idx)
+						# subfeat_w[filt_subfeat_idx] = normalize(estm.feature_importances_, norm='l1')
+						subfeat_w[filt_subfeat_idx] = filt_subfeat_w
+						# print 'Sub FI shape: (%s)' % ','.join([str(x) for x in filt_subfeat_w.shape])
+						# print 'Feature Importance inside %s Ensemble Method: %s' % (component, filt_subfeat_w)
+						sub_feat_w[(component, i)] = subfeat_w
+		if (hasattr(component, 'get_support')):
+			filt_feat_idx = feature_idx[component.get_support()]
+		for measure in ('feature_importances_', 'coef_', 'scores_'):
+			if (hasattr(cmpn, measure)):
+				filt_feat_w = getattr(cmpn, measure)
+				# print '*' * 80 + '\n%s\n'%filt_feat_w + '*' * 80
+				feat_w = (filt_feat_w.min() - 1) * np.ones_like(feature_idx)
+				# feat_w[filt_feat_idx] = normalize(filt_feat_w, norm='l1')
+				feat_w[filt_feat_idx] = filt_feat_w
+				# print '*' * 80 + '\n%s\n'%feat_w + '*' * 80
+				feat_w_dict[(component, measure)] = feat_w
+				print 'FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape])
+				print 'Sample 10 Feature from %s.%s: %s' % (component, measure, feat_w[feat_w > 0][:10])
+				# print 'Feature Importance from %s.%s: %s' % (component, measure, feat_w)
 	return feat_w_dict, sub_feat_w
 
 
@@ -90,7 +98,7 @@ def get_score(pipeline, X_test, mltl=False):
 
 
 # Benchmark
-def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='micro'):
+def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=False, average='micro'):
 	print '+' * 80
 	print 'Training Model: '
 	print pipeline
@@ -100,15 +108,25 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 	print 'train time: %0.3fs' % train_time
 
 	t0 = time()
-	pred = pipeline.predict(X_test)
+	orig_pred = pred = pipeline.predict(X_test)
 	test_time = time() - t0
 	print '+' * 80
 	print 'Testing: '
 	print 'test time: %0.3fs' % test_time
-
-	accuracy = metrics.accuracy_score(Y_test, pred)
+	
+	is_mltl = mltl
+	if (signed):
+		Y_test = np.column_stack([np.abs(Y_test).reshape((Y_test.shape[0],-1))] + [label_binarize(lb, classes=[-1,1,0])[:,1] for lb in (np.sign(Y_test).astype('int8').reshape((Y_test.shape[0],-1))).T])
+		pred = np.column_stack([np.abs(pred).reshape((pred.shape[0],-1))] + [label_binarize(lb, classes=[-1,1,0])[:,1] for lb in (np.sign(pred).astype('int8').reshape((pred.shape[0],-1))).T])
+		is_mltl = True
+	try:
+		accuracy = metrics.accuracy_score(Y_test, pred)
+	except ValueError as e:
+		print e
+		Y_test, pred = Y_test.ravel(), pred.ravel()
+		accuracy = metrics.accuracy_score(Y_test, pred)
 	print 'accuracy: %0.3f' % accuracy
-	if (average == 'all'):
+	if (is_mltl and average == 'all'):
 		micro_precision = metrics.precision_score(Y_test, pred, average='micro')
 		print 'micro-precision: %0.3f' % micro_precision
 		micro_recall = metrics.recall_score(Y_test, pred, average='micro')
@@ -122,24 +140,25 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 		macro_fscore = metrics.fbeta_score(Y_test, pred, beta=1, average='macro')
 		print 'macro-fscore: %0.3f' % macro_fscore
 	else:
-		precision = metrics.precision_score(Y_test, pred, average=average if mltl else 'binary')
+		precision = metrics.precision_score(Y_test, pred, average=average if is_mltl else 'binary')
 		print 'precision: %0.3f' % precision
-		recall = metrics.recall_score(Y_test, pred, average=average if mltl else 'binary')
+		recall = metrics.recall_score(Y_test, pred, average=average if is_mltl else 'binary')
 		print 'recall: %0.3f' % recall
-		fscore = metrics.fbeta_score(Y_test, pred, beta=1, average=average if mltl else 'binary')
+		fscore = metrics.fbeta_score(Y_test, pred, beta=1, average=average if is_mltl else 'binary')
 		print 'fscore: %0.3f' % fscore
 
 	print 'classification report:'
 	print metrics.classification_report(Y_test, pred)
 
 	print 'confusion matrix:'
-	if (mltl):
+	if (is_mltl):
 		pass
 	else:
 		print metrics.confusion_matrix(Y_test, pred)
 	print '+' * 80
 
-	if ((isinstance(pipeline.named_steps['clf'], OneVsRestClassifier) and hasattr(pipeline.named_steps['clf'].estimators_[0], 'predict_proba')) or (not isinstance(pipeline.named_steps['clf'], OneVsRestClassifier) and hasattr(pipeline, 'predict_proba'))):
+	clf = pipeline.named_steps['clf'] if (type(pipeline) is Pipeline) else pipeline
+	if ((isinstance(clf, OneVsRestClassifier) and hasattr(clf.estimators_[0], 'predict_proba')) or (not isinstance(clf, OneVsRestClassifier) and hasattr(pipeline, 'predict_proba'))):
 		if (mltl):
 			scores = pipeline.predict_proba(X_test)
 			if (type(scores) == list):
@@ -151,8 +170,12 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 	else:
 		print 'Neither probability estimate nor decision function is supported in the classification model! ROC and PRC figures will be invalid.'
 		scores = [0] * Y_test.shape[0]
-	if (mltl):
-		if (len(Y_test.shape) == 1 or Y_test.shape[1] == 1):
+
+	if (signed):
+		scores = np.concatenate([np.abs(scores).reshape((scores.shape[0],-1))] + [label_binarize(lb, classes=[-1,1,0])[:,:2] for lb in (np.sign(scores).astype('int8').reshape((scores.shape[0],-1))).T], axis=1)
+		
+	if (is_mltl):
+		if ((len(Y_test.shape) == 1 or Y_test.shape[1] == 1) and len(np.unique(Y_test)) > 2):
 			lbz = LabelBinarizer()
 			Y_test = lbz.fit_transform(Y_test)
 		def micro():
@@ -195,44 +218,52 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, average='m
 #	print 'ROC:\n%s\n%s' % (roc[0], roc[1])
 #	print 'PRC:\n%s\n%s' % (prc[0], prc[1])
 
-	print 'Training and Testing X shape: (%s) (%s)' % (','.join([str(x) for x in X_train.shape]), ','.join([str(x) for x in X_test.shape]))
+	print 'Training and Testing X shape: %s; %s' % (', '.join(['(%s)' % ','.join([str(x) for x in X.shape]) for X in X_train]) if type(X_train) is list else '(%s)' % ','.join([str(x) for x in X_train.shape]), ', '.join(['(%s)' % ','.join([str(x) for x in X.shape]) for X in X_test]) if type(X_test) is list else '(%s)' % ','.join([str(x) for x in X_test.shape]))
 	feat_w_dict, sub_feat_w = [{} for i in range(2)]
-	filt_feat_idx = feature_idx = np.arange(X_train.shape[1])
+	filt_feat_idx = feature_idx = np.arange(X_train[0].shape[1] if type(X_train) is list else X_train.shape[1])
 	for component in ('featfilt', 'clf'):
-		if (pipeline.named_steps.has_key(component)):
-			if (hasattr(pipeline.named_steps[component], 'estimators_')):
-				for i, estm in enumerate(pipeline.named_steps[component].estimators_):
-					filt_subfeat_idx = filt_feat_idx[:]
-					if (hasattr(estm, 'get_support')):
-						filt_subfeat_idx = filt_feat_idx[estm.get_support()]
-					for measure in ('feature_importances_', 'coef_', 'scores_'):
-						if (hasattr(estm, measure)):
-							filt_subfeat_w = getattr(estm, measure)
-							subfeat_w = (filt_subfeat_w.min() - 1) * np.ones_like(feature_idx)
-		#					subfeat_w[filt_subfeat_idx] = normalize(estm.feature_importances_, norm='l1')
-							subfeat_w[filt_subfeat_idx] = filt_subfeat_w
-							# print 'Sub FI shape: (%s)' % ','.join([str(x) for x in filt_subfeat_w.shape])
-							# print 'Feature Importance inside %s Ensemble Method: %s' % (component, filt_subfeat_w)
-							sub_feat_w[(component, i)] = subfeat_w
+		if (type(pipeline) != Pipeline):
+			if (component == 'featfilt'):
+				continue
+			else:
+				cmpn = pipeline
+		elif (pipeline.named_steps.has_key(component)):
+			cmpn = pipeline.named_steps[component]
+		else:
+			continue
+		if (hasattr(cmpn, 'estimators_')):
+			for i, estm in enumerate(cmpn.estimators_):
+				filt_subfeat_idx = filt_feat_idx[:]
+				if (hasattr(estm, 'get_support')):
+					filt_subfeat_idx = filt_feat_idx[estm.get_support()]
+				for measure in ('feature_importances_', 'coef_', 'scores_'):
+					if (hasattr(estm, measure)):
+						filt_subfeat_w = getattr(estm, measure)
+						subfeat_w = (filt_subfeat_w.min() - 1) * np.ones_like(feature_idx)
+	#					subfeat_w[filt_subfeat_idx][:len(estm.feature_importances_)] = normalize(estm.feature_importances_, norm='l1')
+						subfeat_w[filt_subfeat_idx][:len(filt_subfeat_w)] = filt_subfeat_w
+						# print 'Sub FI shape: (%s)' % ','.join([str(x) for x in filt_subfeat_w.shape])
+						# print 'Feature Importance inside %s Ensemble Method: %s' % (component, filt_subfeat_w)
+						sub_feat_w[(component, i)] = subfeat_w
 			for measure in ('feature_importances_', 'coef_', 'scores_'):
-				if (hasattr(pipeline.named_steps[component], measure)):
-					filt_feat_w = getattr(pipeline.named_steps[component], measure)
+				if (hasattr(cmpn, measure)):
+					filt_feat_w = getattr(cmpn, measure)
 #					print '*' * 80 + '\n%s\n'%filt_feat_w + '*' * 80
 					feat_w = (filt_feat_w.min() - 1) * np.ones_like(feature_idx)
-#					feat_w[filt_feat_idx] = normalize(filt_feat_w, norm='l1')
-					feat_w[filt_feat_idx] = filt_feat_w
+#					feat_w[filt_feat_idx][:filt_feat_w.shape[1] if len(filt_feat_w.shape) > 1 else len(filt_feat_w)] = normalize(filt_feat_w[1,:] if len(filt_feat_w.shape) > 1 else filt_feat_w, norm='l1')
+					feat_w[filt_feat_idx][:filt_feat_w.shape[1] if len(filt_feat_w.shape) > 1 else len(filt_feat_w)] = filt_feat_w[1,:] if len(filt_feat_w.shape) > 1 else filt_feat_w
 #					print '*' * 80 + '\n%s\n'%feat_w + '*' * 80
 					feat_w_dict[(component, measure)] = feat_w
 					print 'FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape])
 					print 'Sample 10 Feature from %s.%s: %s' % (component, measure, feat_w[feat_w > 0][:10])
 #					print 'Feature Importance from %s.%s: %s' % (component, measure, feat_w)
-			if (hasattr(pipeline.named_steps[component], 'get_support')):
-				filt_feat_idx = filt_feat_idx[pipeline.named_steps[component].get_support()]
+			if (hasattr(cmpn, 'get_support')):
+				filt_feat_idx = filt_feat_idx[cmpn.get_support()]
 	print '\n'
-	if (average == 'all'):
-		return {'accuracy':accuracy, 'micro-precision':micro_precision, 'micro-recall':micro_recall, 'micro-fscore':micro_fscore, 'macro-precision':macro_precision, 'macro-recall':macro_recall, 'macro-fscore':macro_fscore, 'train_time':train_time, 'test_time':test_time, 'micro-roc':micro_roc, 'macro-roc':macro_roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':pred}
+	if (is_mltl and average == 'all'):
+		return {'accuracy':accuracy, 'micro-precision':micro_precision, 'micro-recall':micro_recall, 'micro-fscore':micro_fscore, 'macro-precision':macro_precision, 'macro-recall':macro_recall, 'macro-fscore':macro_fscore, 'train_time':train_time, 'test_time':test_time, 'micro-roc':micro_roc, 'macro-roc':macro_roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred}
 	else:
-		return {'accuracy':accuracy, 'precision':precision, 'recall':recall, 'fscore':fscore, 'train_time':train_time, 'test_time':test_time, 'roc':roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':pred}
+		return {'accuracy':accuracy, 'precision':precision, 'recall':recall, 'fscore':fscore, 'train_time':train_time, 'test_time':test_time, 'roc':roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred}
 
 
 # Calculate the venn digram overlaps
@@ -277,7 +308,7 @@ def pred_ovl(preds, pred_true=None, axis=1):
 	
 	
 def save_featw(features, crsval_featw, crsval_subfeatw, cfg_param={}, lbid=''):
-	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else lbid
+	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
 	for k, v in crsval_featw.iteritems():
 		measure_str = k.replace(' ', '_').strip('_').lower()
 		feat_w_mt = np.column_stack(v)
@@ -317,19 +348,33 @@ def save_featw(features, crsval_featw, crsval_subfeatw, cfg_param={}, lbid=''):
 def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_param={}, global_param={}, lbid=''):
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
-	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else lbid
+	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
+	to_hdf, hdf5_fpath = cfg_param.setdefault('to_hdf', False), '%s' % 'crsval_dataset.h5' if cfg_param.setdefault('hdf5_fpath', 'crsval_dataset.h5') is None else cfg_param['hdf5_fpath']
 	
 	# Format the data
-	if (type(X_train) != pd.DataFrame):
-		X_train = pd.DataFrame(X_train)
-	if (type(X_test) != pd.DataFrame):
-		X_test = pd.DataFrame(X_test)
-	if (type(Y_train) == pd.DataFrame):
-		Y_train = Y_train.as_matrix()
-	mltl=True if len(Y_train.shape) > 1 and Y_train.shape[1] > 1 else False
+	if (type(X_train) == list):
+		assert all([len(x) == len(X_train[0]) for x in X_train[1:]])
+		X_train = [pd.DataFrame(x) if (type(x) != pd.io.parsers.TextFileReader and type(x) != pd.DataFrame) else x for x in X_train]
+		X_train = [pd.concat(x) if (type(x) == pd.io.parsers.TextFileReader and not to_hdf) else x for x in X_train]
+	else:
+		if (type(X_train) != pd.io.parsers.TextFileReader and type(X_train) != pd.DataFrame):
+			X_train = pd.DataFrame(X_train)
+		X_train = pd.concat(X_train) if (type(X_train) == pd.io.parsers.TextFileReader and not to_hdf) else X_train
+	if (type(X_test) == list):
+		assert all([len(x) == len(X_test[0]) for x in X_test[1:]])
+		X_test = [pd.DataFrame(x) if (type(x) != pd.io.parsers.TextFileReader and type(x) != pd.DataFrame) else x for x in X_test]
+		X_test = [pd.concat(x) if (type(x) == pd.io.parsers.TextFileReader and not to_hdf) else x for x in X_test]
+	else:
+		if (type(X_test) != pd.io.parsers.TextFileReader and type(X_test) != pd.DataFrame):
+			X_test = pd.DataFrame(X_test)
+		X_test = pd.concat(X_test) if (type(X_test) == pd.io.parsers.TextFileReader and not to_hdf) else X_test
+	if (type(Y_train) != pd.io.parsers.TextFileReader and type(Y_train) != pd.DataFrame):
+		Y_train = pd.DataFrame(Y_train)
+	Y_train_mt = Y_train.as_matrix().reshape((Y_train.shape[0],)) if (len(Y_train.shape) == 1 or Y_train.shape[1] == 1) else Y_train.as_matrix()
+	mltl=True if len(Y_train_mt.shape) > 1 and Y_train_mt.shape[1] > 1 or 2 in Y_train_mt else False
 
 	print 'Classification is starting...'
-	preds, scores = [[] for i in range(2)]
+	preds, probs, scores = [[] for i in range(3)]
 	crsval_featw, crsval_subfeatw = [{} for i in range(2)]
 	for vars in model_iter(**model_param):
 		if (global_param['comb']):
@@ -356,25 +401,33 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 		print 'Training Model: '
 		print pipeline
 		t0 = time()
-		pipeline.fit(X_train, Y_train)
+		pipeline.fit(X_train, Y_train_mt)
 		train_time = time() - t0
 		print 'train time: %0.3fs' % train_time
-		if (cfg_param.setdefault('save_model', True)):
-			io.write_obj(pipeline, 'clf_%s.mdl' % model_name.replace(' ', '_').lower())
-
 		t0 = time()
 		pred = pipeline.predict(X_test)
+		prob = pipeline.predict_proba(X_test)
 		test_time = time() - t0
 		print '+' * 80
 		print 'Testing: '
 		print 'test time: %0.3fs' % test_time
 		preds.append(pred)
+		probs.append(prob)
 		scores.append(get_score(pipeline, X_test, mltl))
-		if (cfg_param.setdefault('save_pred', True)):
-			io.write_npz(dict(pred_lb=pred), 'clf_pred_%s' % model_name.replace(' ', '_').lower())
 		
+		# Save predictions and model
+		if (cfg_param.setdefault('save_pred', True)):
+			io.write_npz(dict(pred_lb=pred, pred_prob=prob), 'clf_pred_%s%s' % (model_name.replace(' ', '_').lower(), lbidstr))
+		if (cfg_param.setdefault('save_model', True)):
+			mdl_name = '%s' % model_name.replace(' ', '_').lower()
+			if (all([hasattr(pipeline.steps[i][1], 'save') for i in range(len(pipeline.steps))])):
+				for sub_mdl_name, mdl in pipeline.steps:
+					mdl.save('%s_%s%s' % (mdl_name, sub_mdl_name.replace(' ', '_').lower(), lbidstr))
+			else:
+				io.write_obj(pipeline, '%s%s' % (mdl_name, lbidstr))
+
 		# Feature importances
-		feat_w, sub_feat_w = get_featw(pipeline, X_train.shape[1])
+		feat_w, sub_feat_w = get_featw(pipeline, X_train[0].shape[1] if (type(X_train) is list) else X_train.shape[1])
 		for k, v in feat_w.iteritems():
 			key = '%s_%s_%s' % (model_name, k[0], k[1])
 			crsval_featw.setdefault(key, []).append(v)
@@ -384,10 +437,7 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 		print '\n'
 
 	# Prediction overlap
-	if (mltl):
-		preds_mt = np.column_stack([x.ravel() for x in preds])
-	else:
-		preds_mt = np.column_stack(preds)
+	preds_mt = np.column_stack([x.ravel() for x in preds])
 	povl = np.array(pred_ovl(preds_mt))
 	# Spearman's rank correlation
 	spmnr, spmnr_pval = stats.spearmanr(preds_mt)
@@ -413,48 +463,120 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 		spmnr_pval_df.to_excel('spmnr_pval_clf%s.xlsx' % lbidstr)
 	if (cfg_param.setdefault('save_spmnr_pval_npz', False)):
 		io.write_df(spmnr_pval_df, 'spmnr_pval_clf%s.npz' % lbidstr, with_idx=True)
-	save_featw(X_train.columns.values, crsval_featw, crsval_subfeatw, cfg_param=cfg_param, lbid=lbid)
+	save_featw(X_train[0].columns.values if (type(X_train) is list) else X_train.columns.values, crsval_featw, crsval_subfeatw, cfg_param=cfg_param, lbid=lbid)
 	
 	return preds, scores
-	
+
+
+def kf2data(kf, X, Y, to_hdf=False, hdf5_fpath='crsval_dataset.h5'):
+	if (to_hdf):
+		import h5py
+		from keras.utils.io_utils import HDF5Matrix
+		hdf5_fpath = hdf5_fpath if hdf5_fpath else os.path.abspath('crsval_dataset.h5')
+	for i, (train_idx, test_idx) in enumerate(kf):
+		if (type(X)==list):
+			if (type(X[0]) == pd.io.parsers.TextFileReader):
+				pass
+			assert all([len(x) == len(X[0]) for x in X[1:]])
+			X_train, X_test = [x.iloc[train_idx,:] for x in X] if type(X[0]) != HDF5Matrix else [x[train_idx,:] for x in X], [x.iloc[test_idx,:] for x in X] if type(X[0]) != HDF5Matrix else [x[test_idx,:] for x in X]
+			train_idx_df, test_idx_df = pd.DataFrame(np.arange(X_train[0].shape[0]), index=X[0].index[train_idx]), pd.DataFrame(np.arange(X_test[0].shape[0]), index=X[0].index[test_idx])
+		else:
+			if (type(X) == pd.io.parsers.TextFileReader):
+				pass
+			X_train, X_test = X.iloc[train_idx,:] if type(X) != HDF5Matrix else X[train_idx], X.iloc[test_idx,:] if type(X) != HDF5Matrix else X[test_idx]
+			train_idx_df, test_idx_df = pd.DataFrame(np.arange(X_train.shape[0]), index=X.index[train_idx] if type(X) != HDF5Matrix else None), pd.DataFrame(np.arange(X_test.shape[0]), index=X.index[test_idx] if type(X) != HDF5Matrix else None)
+		Y_train, Y_test = Y[train_idx], Y[test_idx]
+		# Y_train = Y_train.reshape((Y_train.shape[0],)) if (len(Y_train.shape) > 1 and Y_train.shape[1] == 1) else Y_train
+		# Y_test = Y_test.reshape((Y_test.shape[0],)) if (len(Y_test.shape) > 1 and Y_test.shape[1] == 1) else Y_test
+		if (to_hdf):
+			with h5py.File(hdf5_fpath, 'w') as hf:
+				if (type(X_train) == list):
+					for idx, x_train in enumerate(X_train):
+						hf.create_dataset('X_train%i' % idx, data=x_train.as_matrix() if type(X) != HDF5Matrix else x_train[:])
+				else:
+					hf.create_dataset('X_train', data=X_train.as_matrix() if type(X) != HDF5Matrix else X_train[:])
+				if (type(X_test) == list):
+					for idx, x_test in enumerate(X_test):
+						hf.create_dataset('X_test%i' % idx, data=x_test.as_matrix() if type(X) != HDF5Matrix else x_test[:])
+				else:
+					hf.create_dataset('X_test', data=X_test.as_matrix() if type(X) != HDF5Matrix else X_test[:])
+				hf.create_dataset('Y_train', data=Y_train if type(Y) != HDF5Matrix else Y_train[:])
+				hf.create_dataset('Y_test', data=Y_test if type(Y) != HDF5Matrix else Y_test[:])
+			yield i, [HDF5Matrix(hdf5_fpath, 'X_train%i' % idx) for idx in range(len(X_train))] if (type(X_train) == list) else HDF5Matrix(hdf5_fpath, 'X_train'), [HDF5Matrix(hdf5_fpath, 'X_test%i' % idx) for idx in range(len(X_test))] if (type(X_test) == list) else HDF5Matrix(hdf5_fpath, 'X_test'), HDF5Matrix(hdf5_fpath, 'Y_train'), HDF5Matrix(hdf5_fpath, 'Y_test'), train_idx_df, test_idx_df
+			# The implementation of HDF5Matrix is not good since it keep all the hdf5 file opened, so we need to manually close them.
+			remove_hfps = []
+			for hfpath, hf in HDF5Matrix.refs.iteritems():
+				if (hfpath.startswith(hdf5_fpath)):
+					hf.close()
+					remove_hfps.append(hfpath)
+			for hfpath in remove_hfps:
+				HDF5Matrix.refs.pop(hfpath, None)
+		else:
+			yield i, [x.as_matrix() for x in X_train] if (type(X_train) == list) else X_train.as_matrix(), [x.as_matrix() for x in X_test] if (type(X_test) == list) else X_test.as_matrix(), Y_train, Y_test, train_idx_df, test_idx_df
+
 	
 # Cross validation
 def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_param={}, split_param={}, global_param={}, lbid=''):
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
-	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else lbid
+	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
+	to_hdf, hdf5_fpath = cfg_param.setdefault('to_hdf', False), '%s' % 'crsval_dataset.h5' if cfg_param.setdefault('hdf5_fpath', 'crsval_dataset.h5') is None else cfg_param['hdf5_fpath']
 	
 	# Format the data
-	if (type(X) != pd.DataFrame):
-		X = pd.DataFrame(X)
-	if (type(Y) == pd.DataFrame):
-		Y = Y.as_matrix()
-	if (len(Y.shape) == 1 or Y.shape[1] == 1):
-		Y = Y.reshape((Y.shape[0],))
+	if (type(X) == list):
+		assert all([len(x) == len(X[0]) for x in X[1:]])
+		X = [pd.DataFrame(x) if (type(x) != pd.io.parsers.TextFileReader and type(x) != pd.DataFrame) else x for x in X]
+		X = [pd.concat(x) if (type(x) == pd.io.parsers.TextFileReader and not to_hdf) else x for x in X]
+	else:
+		if (type(X) != pd.io.parsers.TextFileReader and type(X) != pd.DataFrame):
+			X = pd.DataFrame(X) if type(X) != HDF5Matrix else X
+		X = pd.concat(X) if (type(X) == pd.io.parsers.TextFileReader and not to_hdf) else X
+	if (type(Y) != pd.io.parsers.TextFileReader and type(Y) != pd.DataFrame):
+		Y = pd.DataFrame(Y) if (type(Y) == pd.io.parsers.TextFileReader and not to_hdf) else Y
+	if (type(Y) != HDF5Matrix):
+		Y_mt = Y.as_matrix().reshape((Y.shape[0],)) if (len(Y.shape) == 1 or Y.shape[1] == 1) else Y.as_matrix()
+	else:
+		Y_mt = Y
+	is_mltl = True if len(Y_mt.shape) > 1 and Y_mt.shape[1] > 1 or 2 in Y_mt else False
 		
 	print 'Benchmark is starting...'
 	mean_fpr = np.linspace(0, 1, 100)
 	mean_recall = np.linspace(0, 1, 100)
+	xdf = X[0] if type(X)==list else X
 	if (len(split_param) == 0):
-		kf = list(KFold(n_splits=kfold, shuffle=True, random_state=0).split(X, Y))
-	else:
-		if (split_param.has_key('train_size') and split_param.has_key('test_size')):
-			kf = list(StratifiedShuffleSplit(n_splits=kfold, train_size=split_param['train_size'], test_size=split_param['test_size'], random_state=0).split(X, Y))
+		if (type(xdf) != HDF5Matrix):
+			kf = list(KFold(n_splits=kfold, shuffle=True, random_state=0).split(xdf, Y_mt)) if (len(Y_mt.shape) == 1) else list(KFold(n_splits=kfold, shuffle=True, random_state=0).split(xdf, Y_mt[:,0].reshape((Y_mt.shape[0],))))
 		else:
-			kf = list(StratifiedKFold(n_splits=kfold, shuffle=split_param.setdefault('shuffle', True), random_state=0).split(X, Y))
+			kf = list(KFold(n_splits=kfold, shuffle=True, random_state=0).split(xdf[:], Y_mt[:])) if (len(Y_mt.shape) == 1) else list(KFold(n_splits=kfold, shuffle=True, random_state=0).split(xdf[:], Y_mt[:].reshape((-1,))))
+	else:
+		# To-do: implement the split method for multi-label data
+		if (split_param.has_key('train_size') and split_param.has_key('test_size')):
+			kf = list(StratifiedShuffleSplit(n_splits=kfold, train_size=split_param['train_size'], test_size=split_param['test_size'], random_state=0).split(xdf, Y_mt)) if (len(Y_mt.shape) == 1) else list(StratifiedShuffleSplit(n_splits=kfold, train_size=split_param['train_size'], test_size=split_param['test_size'], random_state=0).split(xdf, Y_mt[:,0].reshape((Y_mt.shape[0],))))
+		else:
+			kf = list(StratifiedKFold(n_splits=kfold, shuffle=split_param.setdefault('shuffle', True), random_state=0).split(xdf, Y_mt)) if (len(Y_mt.shape) == 1) else list(StratifiedKFold(n_splits=kfold, shuffle=split_param.setdefault('shuffle', True), random_state=0).split(xdf, Y_mt[:,0].reshape((Y_mt.shape[0],))))
 	crsval_results, crsval_povl, crsval_spearman, crsval_kendalltau, crsval_pearson = [[] for i in range(5)]
 	crsval_roc, crsval_prc, crsval_featw, crsval_subfeatw = [{} for i in range(4)]
-	for i, (train_idx, test_idx) in enumerate(kf):
+	# for i, (train_idx, test_idx) in enumerate(kf):
+	for i, X_train, X_test, Y_train, Y_test, train_idx_df, test_idx_df in kf2data(kf, X, Y_mt, to_hdf=to_hdf, hdf5_fpath=hdf5_fpath):
 		del PL_NAMES[:]
 		PL_SET.clear()
 		print '\n' + '-' * 80 + '\n' + '%s time validation' % imath.ordinal(i+1) + '\n' + '-' * 80 + '\n'
-		X_train, X_test = X.iloc[train_idx,:].as_matrix(), X.iloc[test_idx,:].as_matrix()
-		Y_train, Y_test = Y[train_idx], Y[test_idx]
-		train_idx_df, test_idx_df = pd.DataFrame(np.arange(X_train.shape[0]), index=X.index[train_idx]), pd.DataFrame(np.arange(X_test.shape[0]), index=X.index[test_idx])
 		if (cfg_param.setdefault('save_crsval_idx', False)):
 			io.write_df(train_idx_df, 'train_idx_crsval_%s%s.npz' % (i, lbidstr), with_idx=True)
 			io.write_df(test_idx_df, 'test_idx_crsval_%s%s.npz' % (i, lbidstr), with_idx=True)
+		if (cfg_param.setdefault('npg_ratio', None) is not None):
+			npg_ratio = cfg_param['npg_ratio']
+			y = Y_train[:,0]
+			if (1.0 * np.abs(y).sum() / Y_train.shape[0] < 1.0 / (npg_ratio + 1)):
+				all_true = np.arange(Y_train.shape[0])[y > 0].tolist()
+				all_false = np.arange(Y_train.shape[0])[y <= 0].tolist()
+				true_id = np.random.choice(len(all_true), size=int(1.0 / npg_ratio * len(all_false)), replace=True)
+				true_idx = [all_true[i] for i in true_id]
+				all_train_idx = true_idx + all_false
+				X_train = [x.iloc[all_train_idx] for x in X_train] if (type(X_train) is list) else X_train.iloc[all_train_idx]
+				Y_train = Y_train[all_train_idx,:]
 		results, preds = [[] for x in range(2)]
+		Y_test = np.array(Y_test)
 		for vars in model_iter(**model_param):
 			if (global_param['comb']):
 				mdl_name, mdl = [vars[x] for x in range(2)]
@@ -476,15 +598,15 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 			PL_SET.add(model_name)
 			print model_name
 			# Benchmark results
-			bm_results = benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=True if len(Y.shape) > 1 and Y.shape[1] > 1 or 2 in Y else False, average=avg)
-			if (avg == 'all'):
+			bm_results = benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=is_mltl, signed=global_param.setdefault('signed', True if np.where(Y_mt<0)[0].shape[0]>0 else False), average=avg)
+			if (is_mltl and avg == 'all'):
 				results.append([bm_results[x] for x in ['accuracy', 'micro-precision', 'micro-recall', 'micro-fscore', 'macro-precision', 'macro-recall', 'macro-fscore', 'train_time', 'test_time']])
 			else:
 				results.append([bm_results[x] for x in ['accuracy', 'precision', 'recall', 'fscore', 'train_time', 'test_time']])
 			preds.append(bm_results['pred_lb'])
 			if (cfg_param.setdefault('save_crsval_pred', False)):
 				io.write_npz(dict(pred_lb=bm_results['pred_lb'], true_lb=Y_test), 'pred_crsval_%s_%s%s' % (i, model_name.replace(' ', '_').lower(), lbidstr))
-			if (avg == 'all'):
+			if (is_mltl and avg == 'all'):
 				micro_id, macro_id = '-'.join([model_name,'micro']), '-'.join([model_name,'macro'])
 				crsval_roc[micro_id] = crsval_roc.setdefault(micro_id, 0) + np.interp(mean_fpr, bm_results['micro-roc'][0], bm_results['micro-roc'][1])
 				crsval_roc[macro_id] = crsval_roc.setdefault(macro_id, 0) + np.interp(mean_fpr, bm_results['macro-roc'][0], bm_results['macro-roc'][1])
@@ -501,7 +623,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 		# Cross validation results
 		crsval_results.append(results)
 		# Prediction overlap
-		if (True if len(Y.shape) > 1 and Y.shape[1] > 1 else False):
+		if (True if len(Y_mt.shape) > 1 and Y_mt.shape[1] > 1 else False):
 			preds_mt = np.column_stack([x.ravel() for x in preds])
 		else:
 			preds_mt = np.column_stack(preds)
@@ -525,7 +647,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 #	prsnr_avg = np.array(crsval_pearson).mean(axis=0)
 	
 	## Save performance data
-	if (avg == 'all'):
+	if (is_mltl and avg == 'all'):
 		metric_idx = ['Accuracy', 'Micro Precision', 'Micro Recall', 'Micro F score', 'Macro Precision', 'Macro Recall', 'Macro F score', 'Train time', 'Test time']
 	else:
 		metric_idx = ['Accuracy', 'Precision', 'Recall', 'F score', 'Train time', 'Test time']
@@ -535,11 +657,11 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	povl_avg_df = pd.DataFrame(povl_avg, index=povl_idx, columns=['pred_ovl', 'tpred_ovl'])
 	spmnr_avg_df = pd.DataFrame(spmnr_avg, index=PL_NAMES+['Annotations'], columns=PL_NAMES+['Annotations'])
 	spmnr_pval_df = pd.DataFrame(spmnr_pval, index=PL_NAMES+['Annotations'], columns=PL_NAMES+['Annotations'])
-	if (cfg_param.setdefault('save_perf_avg', False)):
+	if (cfg_param.setdefault('save_perf_avg', True)):
 		perf_avg_df.to_excel('perf_avg_clf%s.xlsx' % lbidstr)
 	if (cfg_param.setdefault('save_perf_avg_npz', False)):
 		io.write_df(perf_avg_df, 'perf_avg_clf%s.npz' % lbidstr, with_idx=True)
-	if (cfg_param.setdefault('save_perf_std', False)):
+	if (cfg_param.setdefault('save_perf_std', True)):
 		perf_std_df.to_excel('perf_std_clf%s.xlsx' % lbidstr)
 	if (cfg_param.setdefault('save_perf_std_npz', False)):
 		io.write_df(perf_std_df, 'perf_std_clf%s.npz' % lbidstr, with_idx=True)
@@ -556,16 +678,19 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	if (cfg_param.setdefault('save_spmnr_pval_npz', False)):
 		io.write_df(spmnr_pval_df, 'spmnr_pval_clf%s.npz' % lbidstr, with_idx=True)
 	# Feature importances
-	save_featw(X.columns.values, crsval_featw, crsval_subfeatw, cfg_param=cfg_param, lbid=lbid)
+	try:
+		save_featw(xdf.columns.values if type(xdf) != HDF5Matrix else np.arange(xdf.shape[1]), crsval_featw, crsval_subfeatw, cfg_param=cfg_param, lbid=lbid)
+	except Exception as e:
+		print e
 	
 	## Plot figures
-	if (avg == 'all'):
+	if (is_mltl and avg == 'all'):
 		micro_roc_data, micro_roc_labels, micro_roc_aucs, macro_roc_data, macro_roc_labels, macro_roc_aucs = [[] for i in range(6)]
 	else:
 		roc_data, roc_labels, roc_aucs = [[] for i in range(3)]
 	prc_data, prc_labels, prc_aucs = [[] for i in range(3)]
 	for pl in PL_NAMES:
-		if (avg == 'all'):
+		if (is_mltl and avg == 'all'):
 			micro_id, macro_id = '-'.join([pl,'micro']), '-'.join([pl,'macro'])
 			micro_mean_tpr, macro_mean_tpr = crsval_roc[micro_id], crsval_roc[macro_id]
 			micro_mean_tpr, macro_mean_tpr = micro_mean_tpr / len(kf), macro_mean_tpr / len(kf)
@@ -599,16 +724,16 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 		group_array = np.array(group_dict.values())
 		group_array.sort()
 		groups = group_array.tolist()
-	if (avg == 'all'):
+	if (is_mltl and avg == 'all'):
 		aucs_df = pd.DataFrame([micro_roc_aucs, macro_roc_aucs, prc_aucs], index=['Micro ROC AUC', 'Macro ROC AUC', 'PRC AUC'], columns=PL_NAMES)
-		if (cfg_param.setdefault('plot_roc', False)):
+		if (cfg_param.setdefault('plot_roc', True)):
 			plot.plot_roc(micro_roc_data, micro_roc_labels, groups=groups, fname='micro_roc%s'%lbidstr, plot_cfg=common_cfg)
 			plot.plot_roc(macro_roc_data, macro_roc_labels, groups=groups, fname='macro_roc%s'%lbidstr, plot_cfg=common_cfg)
 	else:
 		aucs_df = pd.DataFrame([roc_aucs, prc_aucs], index=['ROC AUC', 'PRC AUC'], columns=PL_NAMES)
-		if (cfg_param.setdefault('plot_roc', False)):
+		if (cfg_param.setdefault('plot_roc', True)):
 			plot.plot_roc(roc_data, roc_labels, groups=groups, fname='roc%s'%lbidstr, plot_cfg=common_cfg)
-	if (cfg_param.setdefault('plot_prc', False)):
+	if (cfg_param.setdefault('plot_prc', True)):
 		plot.plot_prc(prc_data, prc_labels, groups=groups, fname='prc%s'%lbidstr, plot_cfg=common_cfg)
 	if (cfg_param.setdefault('save_auc', False)):
 		aucs_df.to_excel('auc%s.xlsx' % lbidstr)
@@ -668,7 +793,7 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_j
 	return grid.best_params_, grid.best_score_, score_avg_cube, score_std_cube, dim_names, dim_vals
 
 	
-def tune_param_optunity(mdl_name, mdl, X, Y, scoring='f1', optfunc='max', solver='grid search', params={}, mltl=False, avg='micro', n_jobs=-1):
+def tune_param_optunity(mdl_name, mdl, X, Y, scoring='f1', optfunc='max', solver='particle swarm', params={}, mltl=False, avg='micro', n_jobs=-1):
 	import optunity
 	struct, param_space, folds, n_iter = [params.setdefault(k, None) for k in ['struct', 'param_space', 'folds', 'n_iter']]
 	ext_params = dict.fromkeys(param_space.keys()) if (not struct) else dict.fromkeys(params.setdefault('param_names', []))

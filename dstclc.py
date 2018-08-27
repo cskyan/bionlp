@@ -85,9 +85,27 @@ def z_dist(X):
 	
 def cns_dist(X, C=None, metric='euclidean', a=0.5, n_jobs=1, **kwargs):
 	D1 = pdist(np.nan_to_num(X), metric=metric, n_jobs=n_jobs, **kwargs)
-	if (C is None): return normdist(D1)
-	D2 = z_dist(np.nan_to_num(C))
-	return (1 - a) * normdist(D1) + a * normdist(D2)
+	if (C is None):
+		return normdist(D1)
+	elif (type(C) is list):
+		if (type(a) is list):
+			if (len(a) < len(C)):
+				a = a + [a[-1]] * (len(C) - len(a))
+			else:
+				a = a[:len(C)]
+			asum = np.sum(a)
+			if (asum >= 1):
+				a = 0.99 * a / asum
+		else:
+			a = [1.0 * a / len(C)] * len(C)
+		asum = np.sum(a)
+		results = (1 - asum) * normdist(D1)
+		for sub_a, sub_C in zip(a, C):
+			results += sub_a * normdist(z_dist(np.nan_to_num(sub_C)))
+		return results
+	else:
+		D2 = z_dist(np.nan_to_num(C))
+		return (1 - a) * normdist(D1) + a * normdist(D2)
 	
 	
 def infer_pdist(D=None, metric='manhattan', transpose=True, n_jobs=1, **kwargs):

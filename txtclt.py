@@ -24,6 +24,7 @@ from sklearn.preprocessing import MinMaxScaler, LabelBinarizer, normalize
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, KFold, GridSearchCV, RandomizedSearchCV
 from sklearn import metrics
+from keras.utils.io_utils import HDF5Matrix
 
 from util import io, func, plot
 import util.math as imath
@@ -107,7 +108,7 @@ def benchmark(pipeline, X, Y, metric='euclidean', is_fuzzy=False, is_nn=False, c
 	else:
 		# Extract extra parameters
 		model_param = dict(is_fuzzy=is_fuzzy, constraint=constraint)
-		kwargs = dict([(kp[0], model_param[kp[1]]) for kp in [('clt__fuzzy', 'is_fuzzy')('clt__constraint', 'constraint')] if model_param.has_key(kp[1]) and model_param[kp[1]]])
+		kwargs = dict([(kp[0], model_param[kp[1]]) for kp in [('clt__fuzzy', 'is_fuzzy'), ('clt__constraint', 'constraint')] if model_param.has_key(kp[1]) and (isinstance(model_param[kp[1]], bool) and model_param[kp[1]] or not isinstance(model_param[kp[1]], bool) and model_param[kp[1]] is not None)])
 		pred = pipeline.fit_predict(X, **kwargs)
 	elapsed_time = time() - t0
 	print 'elapsed time: %0.3fs' % elapsed_time
@@ -117,12 +118,13 @@ def benchmark(pipeline, X, Y, metric='euclidean', is_fuzzy=False, is_nn=False, c
 		Y, pred_lb = Y.argmax(axis=1).reshape((-1,)), pred.argmax(axis=1).reshape((-1,))
 		pred_lb[pred.sum(axis=1) == 0] == -1
 		pred = pred_lb
+	is_fuzzy = True if (len(pred.shape) > 1 and pred.shape[1] > 1) else False
 	if (is_fuzzy):
 		n_clusters = pred.shape[1]
-		lbz = LabelBinarizer()
-		Y = lbz.fit_transform(Y)
+		# lbz = LabelBinarizer()
+		# Y = lbz.fit_transform(Y)
 	else:
-		n_clusters = len(set(pred)) - (1 if -1 in pred else 0)
+		n_clusters = len(set(func.flatten_list(pred))) - (1 if -1 in pred else 0)
 	print('estimated number of clusters: %d' % n_clusters)
 	if (is_fuzzy):
 		homogeneity, completeness, v_measure, f_measure, purity, ri, ari, mi = fuzzy_metrics(Y, pred, X, use_gpu=use_gpu)
@@ -204,7 +206,7 @@ def clustering(X, model_iter, model_param={}, cfg_param={}, global_param={}, lbi
 	
 	# Format the data
 	if (type(X) != pd.DataFrame):
-		X = pd.DataFrame(X)
+		X = pd.DataFrame(X) if type(X) != HDF5Matrix else X
 
 	print 'Clustering is starting...'
 	preds = []
@@ -236,6 +238,7 @@ def clustering(X, model_iter, model_param={}, cfg_param={}, global_param={}, lbi
 		print 'Fitting Model: '
 		print pipeline
 		t0 = time()
+
 		pred = pipeline.fit_predict(X, **kwargs)
 		elapsed_time = time() - t0
 		print 'elapsed time: %0.3fs' % elapsed_time
@@ -291,6 +294,7 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 		Y = Y.as_matrix()
 	if (len(Y.shape) == 1 or Y.shape[1] == 1):
 		Y = Y.reshape((Y.shape[0],))
+	is_fuzzy = True if (len(Y.shape) > 1 and Y.shape[1] > 1) else False
 		
 	print 'Benchmark is starting...'
 	if (kfold == 1):
@@ -347,8 +351,9 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 		# Cross validation results
 		crsval_results.append(results)
 		# Prediction overlap
-		if (model_param.setdefault('is_fuzzy', False)):
+		if (model_param.setdefault('is_fuzzy', False) or is_fuzzy):
 			preds = [pred.argmax(axis=1) for pred in preds]
+			sub_Y = sub_Y.argmax(axis=1)
 		preds_mt = np.column_stack(preds)
 		if (model_param.setdefault('is_nn', False)):
 			sub_Y_lb = sub_Y.argmax(axis=1).reshape((-1,))
