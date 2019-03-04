@@ -19,7 +19,7 @@ from scipy import stats, linalg
 from scipy.misc import comb
 import pandas as pd
 
-from sklearn.base import clone
+from sklearn.base import clone, BaseEstimator, ClusterMixin, TransformerMixin
 from sklearn.preprocessing import MinMaxScaler, LabelBinarizer, normalize
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, KFold, GridSearchCV, RandomizedSearchCV
@@ -109,7 +109,11 @@ def benchmark(pipeline, X, Y, metric='euclidean', is_fuzzy=False, is_nn=False, c
 		# Extract extra parameters
 		model_param = dict(is_fuzzy=is_fuzzy, constraint=constraint)
 		kwargs = dict([(kp[0], model_param[kp[1]]) for kp in [('clt__fuzzy', 'is_fuzzy'), ('clt__constraint', 'constraint')] if model_param.has_key(kp[1]) and (isinstance(model_param[kp[1]], bool) and model_param[kp[1]] or not isinstance(model_param[kp[1]], bool) and model_param[kp[1]] is not None)])
-		pred = pipeline.fit_predict(X, **kwargs)
+		try:
+			pred = pipeline.fit_predict(X, **kwargs)
+		except TypeError as e:
+			print e
+			pred = pipeline.fit_predict(X)
 	elapsed_time = time() - t0
 	print 'elapsed time: %0.3fs' % elapsed_time
 
@@ -126,9 +130,20 @@ def benchmark(pipeline, X, Y, metric='euclidean', is_fuzzy=False, is_nn=False, c
 	else:
 		n_clusters = len(set(func.flatten_list(pred))) - (1 if -1 in pred else 0)
 	print('estimated number of clusters: %d' % n_clusters)
-	if (is_fuzzy):
+	if (is_fuzzy or (len(pred.shape) > 1 and pred.shape[1] > 1 and any(pred.sum(axis=1) > 1))):
 		homogeneity, completeness, v_measure, f_measure, purity, ri, ari, mi = fuzzy_metrics(Y, pred, X, use_gpu=use_gpu)
 	else:
+		# Convert the binary labels into numerical labels
+		if (len(pred.shape) > 1 and pred.shape[1] > 1):
+			new_pred = np.zeros(pred.shape[0], dtype='int8')
+			idx = np.where(pred==1)
+			new_pred[idx[0]] = idx[1] + 1
+			pred = new_pred
+		if (len(Y.shape) > 1 and Y.shape[1] > 1):
+			new_Y = np.zeros(Y.shape[0], dtype='int8')
+			idx = np.where(Y==1)
+			new_Y[idx[0]] = idx[1] + 1
+			Y = new_Y
 		homogeneity, completeness, v_measure, ari = metrics.homogeneity_score(Y, pred), metrics.completeness_score(Y, pred), metrics.v_measure_score(Y, pred), metrics.adjusted_rand_score(Y, pred)
 	print("homogeneity: %0.3f" % homogeneity)
 	print("completeness: %0.3f" % completeness)
@@ -351,7 +366,7 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 		# Cross validation results
 		crsval_results.append(results)
 		# Prediction overlap
-		if (model_param.setdefault('is_fuzzy', False) or is_fuzzy):
+		if ((model_param.setdefault('is_fuzzy', False) or is_fuzzy) and len(preds[0].shape) > 1 and preds[0].shape[1] > 1):
 			preds = [pred.argmax(axis=1) for pred in preds]
 			sub_Y = sub_Y.argmax(axis=1)
 		preds_mt = np.column_stack(preds)
@@ -497,3 +512,17 @@ def filt_clt_std(X, Y, threshold=0.2):
 	for fo in filtout:
 		np.place(Y, Y==fo, -1)
 	return Y
+	
+	
+class DummyCluster(BaseEstimator, ClusterMixin, TransformerMixin):
+	def __init__(self, output=None, **kwargs):
+		self.output_ = io.read_npz(output)['pred_lb']
+
+	def fit_predict(self, X, y=None, **kwargs):
+		return self.output_
+
+	def fit(self, X, y=None, constraint=None):
+		return self
+
+	def predict(self, X, constraint=None):
+		return self.output_
