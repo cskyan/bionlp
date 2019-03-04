@@ -28,6 +28,7 @@ import io, func
 
 MON = False
 BASE_COLOR = ['b', 'g', 'r', 'y', 'c', 'm']
+LINE_STYLE = ['-', '--', '-.', ':', 'steps']
 
 # Font config
 plt.rc('savefig', dpi=600)
@@ -80,7 +81,7 @@ def gen_colorls_groups(num, cm=None):
 	group_color += base_color[:num % len(base_color)]
 	def clsg(m, n):
 		colors = [group_color[m]] * n
-		line_styles = ['-', '--', '-.', ':', 'steps']
+		line_styles = LINE_STYLE
 		lss = list(line_styles)
 		lss *= int(n / len(line_styles))
 		lss += line_styles[:n % len(line_styles)]
@@ -89,7 +90,7 @@ def gen_colorls_groups(num, cm=None):
 	
 	
 def gen_markers(num):
-	base_markers = ['o','^','s','*','+','x','D','d','p','H','h','v','<','>','1','2','3','4','.','|','_',r'$\clubsuit$']
+	base_markers = ['o','^','s','*','+','x','D','d','p',r'$\clubsuit$','<','h','1','v','2','>','H','3','4','.','|','_']
 	markers = []
 	if (num > 0):
 		if (num <= len(base_markers)):
@@ -163,7 +164,7 @@ def smooth_data(x, y, pnum=300):
 	return new_x, new_y
 
 
-def plot_roc(data, labels, groups=None, mltl_ls=False, title='Receiver operating characteristic', fname='roc', fmt='png', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}, **kwargs):
+def plot_roc(data, labels, groups=None, title='Receiver operating characteristic', fname='roc', fmt='png', style=None, mltl_marker=None, mltl_ls=False, auto_color=True, ref_lines={}, plot_cfg={}, annotator=None, annotation={}, **kwargs):
 	global MON
 	fmt = plot_cfg.setdefault('fmt', fmt)
 	style = plot_cfg.setdefault('style', style)
@@ -175,11 +176,20 @@ def plot_roc(data, labels, groups=None, mltl_ls=False, title='Receiver operating
 	fig = plt.figure()
 	ax = plt.axes()
 	
-	params = dict(lw=1)
+	params = dict(lw=1, markersize=5, markevery=10)
 	params.update(kwargs)
 	if (groups is None):
-		for i in xrange(len(data)):
-			plt.plot(data[i][0], data[i][1], label=labels[i], **params)
+		if (mltl_marker):
+			markers = gen_markers(len(data))
+			colors, alphas = gen_colors(len(data), cm=cmap if len(data) > len(BASE_COLOR) else None)
+			for i in xrange(len(data)):
+				if (auto_color):
+					plt.plot(data[i][0], data[i][1], label=labels[i], marker=markers[i], **params)
+				else:
+					plt.plot(data[i][0], data[i][1], label=labels[i], color=colors[i], alpha=alphas[i], marker=markers[i], **params)
+		else:
+			for i in xrange(len(data)):
+				plt.plot(data[i][0], data[i][1], label=labels[i], **params)
 	else:
 		glbl_id = 0
 		col_kwargs = dict(cm=cmap if len(groups) > len(BASE_COLOR) else None)
@@ -224,7 +234,7 @@ def plot_roc(data, labels, groups=None, mltl_ls=False, title='Receiver operating
 	plt.close()
 
 
-def plot_prc(data, labels, groups=None, mltl_ls=False, title='Precision recall characteristic', fname='prc', fmt='png', style=None, ref_lines={}, plot_cfg={}, annotator=None, annotation={}, **kwargs):
+def plot_prc(data, labels, groups=None, title='Precision recall characteristic', fname='prc', fmt='png', style=None, mltl_marker=None, mltl_ls=False, auto_color=True, ref_lines={}, plot_cfg={}, annotator=None, annotation={}, **kwargs):
 	global MON
 	fmt = plot_cfg.setdefault('fmt', fmt)
 	style = plot_cfg.setdefault('style', style)
@@ -236,14 +246,28 @@ def plot_prc(data, labels, groups=None, mltl_ls=False, title='Precision recall c
 	fig = plt.figure()
 	ax = plt.axes()
 
-	params = dict(lw=1)
+	params = dict(lw=1, markersize=5, markevery=10)
 	params.update(kwargs)
 	if (groups is None):
-		for i in xrange(len(data)):
-			plt.plot(data[i][0], data[i][1], label=labels[i], **params)
+		if (mltl_marker):
+			markers = gen_markers(len(data))
+			colors, alphas = gen_colors(len(data), cm=cmap if len(data) > len(BASE_COLOR) else None)
+			for i in xrange(len(data)):
+				if (auto_color):
+					plt.plot(data[i][0], data[i][1], label=labels[i], marker=markers[i], **params)
+				else:
+					plt.plot(data[i][0], data[i][1], label=labels[i], color=colors[i], alpha=alphas[i], marker=markers[i], **params)
+		else:
+			for i in xrange(len(data)):
+				plt.plot(data[i][0], data[i][1], label=labels[i], **params)
 	else:
 		glbl_id = 0
 		col_kwargs = dict(cm=cmap if len(groups) > len(BASE_COLOR) else None)
+		if (mltl_marker):
+			if (mltl_marker=='intergroups'):
+				pass
+			elif (mltl_marker=='intragroups'):
+				pass
 		if (mltl_ls):
 			colorls_groups = gen_colorls_groups(len(groups), **col_kwargs)
 			for i, grp in enumerate(groups):

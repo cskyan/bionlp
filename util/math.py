@@ -49,7 +49,15 @@ def slice_last_axis(array, slice_array):
 	index_base = array2index(slice_array, ret_base=True)
 	idx = [x.flatten() for x in index_base] + [slice_array.flatten()]
 	return array[idx].reshape(array.shape[:-1])
-
+	
+	
+def slide_window(X, half_window_size=1, padding_val=0):
+    if (type(X) == np.ndarray):
+        X = X.tolist()
+    if (all([type(x) is not list or len(x) == 1 for x in X])):
+        return [[padding_val] * max(0, half_window_size - i) + X[max(0, i - half_window_size):min(len(X), i + half_window_size + 1)] + [padding_val] * (half_window_size - min(half_window_size, len(X) - 1 - i)) for i in range(len(X))]
+    else:
+        return [[[padding_val] * max(0, half_window_size - j) + X[i][max(0, j - half_window_size):min(len(X[i]), j + half_window_size + 1)] + [padding_val] * (half_window_size - min(half_window_size, len(X[i]) - 1 - j)) for j in range(len(X[i]))] for i in range(len(X))]
 	
 def softmax(w, t=1.0):
     e = np.exp(np.array(w) / t)

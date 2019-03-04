@@ -58,6 +58,7 @@ def run(target, **kwargs):
 
 
 def run_pool(target, n_jobs=1, pool=None, ret_pool=False, dist_param=[], **kwargs):
+	if (n_jobs < 1): return None
 	res_list, fix_kwargs, iter_kwargs = [], {}, {}
 	if (pool is None):
 		pool = Pool(processes=n_jobs)
@@ -67,13 +68,16 @@ def run_pool(target, n_jobs=1, pool=None, ret_pool=False, dist_param=[], **kwarg
 			iter_kwargs[k] = v
 		else:
 			fix_kwargs[k] = v
-	# Construct arguments for each process
-	for argv in zip(*iter_kwargs.values()):
-		args = dict(zip(iter_kwargs.keys(), argv))
-		args.update(fix_kwargs)
-		r = pool.apply_async(target, kwds=args)
-		res_list.append(r)
-	res_list = [r.get() for r in res_list]
+	if (len(iter_kwargs) == 0):
+		res_list = [pool.apply_async(target, kwds=kwargs) for x in range(n_jobs)]
+	else:
+		# Construct arguments for each process
+		for argv in zip(*iter_kwargs.values()):
+			args = dict(zip(iter_kwargs.keys(), argv))
+			args.update(fix_kwargs)
+			r = pool.apply_async(target, kwds=args)
+			res_list.append(r)
+	res_list = [r.get() for r in res_list] if len(res_list) > 1 else res_list[0].get()
 	time.sleep(0.01)
 	if (ret_pool):
 		return res_list, pool

@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-from sklearn.cross_validation import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit
 
 
 def samp_df(df, n=None, frac=None, key=None, filt_func=lambda x: x, reset_idx=False):
