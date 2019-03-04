@@ -11,7 +11,6 @@
 
 import os, sys, time, psutil
 
-import spacy, pysolr
 from gensim.models import Word2Vec
 from gensim.models import KeyedVectors
 
@@ -32,7 +31,11 @@ SC=';;'
 class GensimW2VWrapper(object):
 	def __init__(self, model_path='wordvec.bin', mmap='r'):
 		self.model_path = model_path if model_path and os.path.exists(model_path) else os.path.join(DATA_PATH, W2V_MODEL)
-		self.model = KeyedVectors.load(self.model_path, mmap=mmap)
+		try:
+			self.model = KeyedVectors.load(self.model_path, mmap=mmap)
+		except Exception as e:
+			print e
+			self.model = KeyedVectors.load_word2vec_format(self.model_path, binary=True)
 		
 	def get_vocab(self):
 		word2idx = dict([(k, v.index) for k, v in self.model.vocab.items()])
@@ -64,6 +67,7 @@ class GensimW2VWrapper(object):
 			return Embedding(input_dim=weights.shape[0], output_dim=weights.shape[1], weights=[weights], **kwargs)
 			
 	def get_text_stream(text, input_mode='sentence', output_mode='sentence', to_idx=True, batch_size=1000, n_jobs=1):
+		import spacy
 		spacy_nlp = spacy.load('en')
 		for doc in spacy_nlp.pipe(text, disable=['tag', 'entity'], batch_size=batch_size, n_threads=n_jobs if n_jobs > 0 else psutil.cpu_count()):
 			if (input_mode == 'document'):
@@ -103,6 +107,7 @@ class SolrIterable(object):
 		self.analyzer = analyzer
 		self.n_jobs = n_jobs if n_jobs > 0 else psutil.cpu_count()
 	def __iter__(self):
+		import pysolr
 		solr = pysolr.Solr(self.endpoint, timeout=self.timeout)
 		num_doc = solr.search(self.query, rows=0).hits
 		num_doc = num_doc if (self.maxnum is None or self.maxnum < 1) else min(num_doc, self.maxnum)
@@ -153,6 +158,7 @@ class SolrIterable(object):
 
 
 def _target(endpoint='', timeout=10, query='*:*', start=0, **kw_args):
+	import pysolr
 	trial = 0 if MAX_TRIAL is None else MAX_TRIAL
 	while (MAX_TRIAL is None or trial > 0):
 		try:
