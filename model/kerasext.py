@@ -9,7 +9,7 @@
 ###########################################################################
 ''' Keras Deep Learning Model '''
 
-import os, re
+import os, re, sys, traceback
 
 import numpy as np
 from sklearn.utils import class_weight
@@ -22,7 +22,7 @@ from ..util import fs, io, math, func, njobs
 
 BEMAP = {'th':'theano', 'tf':'tensorflow'}
 
-NUM_PROCESS, DEVICE_ID, DEV, DEVICE_INIT, DEVICE_VARS = 0, 0, '', False, {}
+NUM_PROCESS, PHSCL_DEV_ID, DEVICE_ID, DEV, DEV_IDQ, DEVICE_INIT, DEVICE_VARS = 0, 0, 0, '', '', False, {'gpu_mem':0.95}
 
 
 class BaseWrapper(KerasClassifier):
@@ -32,23 +32,24 @@ class BaseWrapper(KerasClassifier):
 		self.proba_thrsh = proba_thrsh
 		self.n_jobs = n_jobs
 		self.histories = []
-		if (self.sk_params.has_key('session')):
-			del self.sk_params['session']
-	def __del__(self):
-		if (hasattr(self, 'context') and self.context.setdefault('session', None) is not None):
-			self.context['session'].close()
-			del self.context['session']
-			if DEVICE_VARS.has_key('sess'): del DEVICE_VARS['sess']
-			if (self.context.has_key('backend') and self.context['backend'] == 'tf'):
-				import keras.backend.tensorflow_backend as K
-				K.set_session(None)
+	# def __del__(self):
+		# if (hasattr(self, 'context') and self.context.setdefault('session', None) is not None):
+			# self.context['session'].close()
+			# del self.context['session']
+			# if (self.context.has_key('backend') and self.context['backend'] == 'tf'):
+				# import keras.backend.tensorflow_backend as K
+				# K.clear_session()
+				# K.set_session(None)
 	def fit(self, X, y, **kw_args):
 		try:
 			with gen_cntxt(**self.context):
-				self.histories.append(super(BaseWrapper, self).fit(X, y, **kw_args))
+				self.histories.append(super(BaseWrapper, self).fit(X, y, verbose=DEVICE_VARS['verbose'], **kw_args))
 				return self
 		except Exception as e:
-			print e
+			print '-' * 60
+			traceback.print_exc(file=sys.stderr)
+			print '-' * 60
+			# print e
 	def predict(self, X, **kw_args):
 		with gen_cntxt(**self.context):
 			return super(BaseWrapper, self).predict(X, **kw_args)
@@ -59,7 +60,7 @@ class BaseWrapper(KerasClassifier):
 		self.build_fn, self.sk_params, self.model, self.histories, self.context = build_fn.__name__, {k:v for k, v in sk_params.iteritems() if k not in model_params.keys()}, None, [], {}
 		io.write_obj(self, fname)
 		if (sep_arch):
-			io.write_json(model.to_json(), '%s.json' % fname)
+			fs.write_file(model.to_json(), '%s.json' % fname)
 			model.save_weights('%s.h5' % fname)
 		else:
 			model.save('%s.h5' % fname)
@@ -73,6 +74,14 @@ class BaseWrapper(KerasClassifier):
 			self.model.load_weights('%s.h5' % os.path.splitext(fname)[0])
 		else:
 			self.model = load_model('%s.h5' % fname, custom_objects=custom_objects)
+	# def clear(self):
+		# if DEVICE_VARS.has_key('sess'):
+			# DEVICE_VARS['sess'].close()
+			# del DEVICE_VARS['sess']
+		# if (self.context.has_key('backend') and self.context['backend'] == 'tf'):
+			# import keras.backend.tensorflow_backend as K
+			# K.clear_session()
+			# K.set_session(None)
 
 'Multiple Label Classifier'
 class MLClassifier(BaseWrapper):
@@ -112,13 +121,13 @@ class MLClassifier(BaseWrapper):
 						y = to_categorical(y)
 					fit_args = copy.deepcopy(self.filter_sk_params(Sequential.fit))
 					fit_args.update(kw_args)
-					# history = njobs.run_pool(lambda x: self.train_models[x].fit(X, y[:,x], **fit_args), n_jobs=self.n_jobs, dist_param=['x'], x=range(y.shape[1])) if self.n_jobs > 1 else [self.train_models[i].fit(X, y[:,i], **fit_args) for i in range(y.shape[1])]
+					# history = njobs.run_pool(lambda x: self.train_models[x].fit(X, y[:,x], verbose=DEVICE_VARS['verbose'], **fit_args), n_jobs=self.n_jobs, dist_param=['x'], x=range(y.shape[1])) if self.n_jobs > 1 else [self.train_models[i].fit(X, y[:,i], **fit_args) for i in range(y.shape[1])]
 					history, all_ids = [], set(range(y.shape[1]))
 					for i in range(y.shape[1]):
 						for j in (all_ids - set([i])):
 							self.train_models[j].trainable = False
 						self.train_models[i].trainable = True
-						history.append(self.train_models[i].fit(X, y[:,i], **fit_args))
+						history.append(self.train_models[i].fit(X, y[:,i], verbose=DEVICE_VARS['verbose'], **fit_args))
 					self.histories.append(history)
 					return self
 					# Copy from keras -- END
@@ -147,28 +156,47 @@ class MLClassifier(BaseWrapper):
 		if probs.shape[-1] == 1:
 			probs = np.hstack([1 - probs, probs])
 		return probs
-	def save(self, fname='kerasmdl'):
+	def save(self, fname='kerasmdl', sep_arch=False, save_history=True):
 		if (not self.mlmt):
-			super(MLClassifier, self).save(fname=fname)
+			super(MLClassifier, self).save(fname=fname, sep_arch=sep_arch, save_history=save_history)
 		else:
 			# For MLMT Model
 			model_params = self.filter_sk_params(self.build_fn)
-			build_fn, sk_params, train_models, predict_model, context = self.build_fn, self.sk_params, self.train_models, self.predict_model, self.context
+			build_fn, sk_params, train_models, predict_model, histories, context = self.build_fn, self.sk_params, self.train_models, self.predict_model, self.histories, self.context
 			self.build_fn, self.sk_params, self.train_models, self.predict_model, self.context = None, {k:v for k, v in sk_params.iteritems() if k not in model_params.keys()}, None, None, {}
 			io.write_obj(self, fname)
-			for i, train_mdl in enumerate(train_models):
-				train_mdl.save('train_%s_%i.h5' % (fname, i))
-			predict_model.save('predict_%s.h5' % fname)
+			if (sep_arch):
+				for i, train_mdl in enumerate(train_models):
+					fs.write_file(train_mdl.to_json(), 'train_%s_%i.json' % (fname, i))
+					train_mdl.save_weights('train_%s_%i.h5' % (fname, i))
+				fs.write_file(predict_model.to_json(), 'predict_%s_%i.json' % (fname, i))
+				predict_model.save_weights('predict_%s_%i.h5' % (fname, i))
+			else:
+				for i, train_mdl in enumerate(train_models):
+					train_mdl.save('train_%s_%i.h5' % (fname, i))
+				predict_model.save('predict_%s.h5' % fname)
+			if (save_history):
+				for i, history in enumerate(histories):
+					io.write_obj([his.history for his in history], '%s_histories_%i' % (fname, i))
 			self.build_fn, self.sk_params, self.train_models, self.predict_model, self.context = build_fn, sk_params, train_models, predict_model, context
-	def load(self, fname='kerasmdl', custom_objects={}):
+	def load(self, fname='kerasmdl', custom_objects={}, sep_arch=False):
 		if (not self.mlmt):
-			super(MLClassifier, self).load(fname=fname, custom_objects=custom_objects)
+			super(MLClassifier, self).load(fname=fname, custom_objects=custom_objects, sep_arch=sep_arch)
 		else:
 			# For MLMT Model
 			basename = os.path.splitext(os.path.basename(fname))[0]
-			self.train_models = [load_model(fpath, custom_objects=custom_objects) for fpath in fs.listf(os.path.dirname(os.path.abspath(fname)), pattern='train_%s_.*' % basename, full_path=True)]
-			self.predict_model = load_model(os.path.join(os.path.dirname(fname), 'predict_%s.h5' % basename), custom_objects=custom_objects)
-		
+			if (sep_arch):
+				self.train_models = []
+				for fpath in fs.listf(os.path.dirname(os.path.abspath(fname)), pattern='train_%s_.*' % basename, full_path=True):
+					train_mdl = model_from_json('\n'.join(fs.read_file('%s.json' % os.path.splitext(fpath)[0])), custom_objects=custom_objects)
+					train_mdl.load_weights('%s.h5' % os.path.splitext(fpath)[0])
+					self.train_models.append(train_mdl)
+				self.predict_model = model_from_json('\n'.join(fs.read_file(os.path.join(os.path.dirname(fname), 'predict_%s.json' % basename))), custom_objects=custom_objects)
+				self.predict_model.load_weights('%s.h5' % os.path.join(os.path.dirname(fname), 'predict_%s.h5' % basename))
+			else:
+				self.train_models = [load_model(fpath, custom_objects=custom_objects) for fpath in fs.listf(os.path.dirname(os.path.abspath(fname)), pattern='train_%s_.*' % basename, full_path=True)]
+				self.predict_model = load_model(os.path.join(os.path.dirname(fname), 'predict_%s.h5' % basename), custom_objects=custom_objects)
+
 		
 'Signed Label Classifier'
 class SignedClassifier(BaseWrapper):
@@ -222,9 +250,9 @@ class KerasCluster(KerasClassifier):
 		fit_args = copy.deepcopy(self.filter_sk_params(Sequential.fit))
 		fit_args.update(kw_args)
 		if (constraint is None):
-			history = self.model.fit(X, y, batch_size=self.batch_size, **fit_args)
+			history = self.model.fit(X, y, batch_size=self.batch_size, verbose=DEVICE_VARS['verbose'], **fit_args)
 		else:
-			history = self.model.fit([X, constraint], y, batch_size=self.batch_size, **fit_args)
+			history = self.model.fit([X, constraint], y, batch_size=self.batch_size, verbose=DEVICE_VARS['verbose'], **fit_args)
 		return history
 	def predict(self, X, constraint=None, **kw_args):
 		if (constraint is None):
@@ -233,11 +261,14 @@ class KerasCluster(KerasClassifier):
 			return super(KerasCluster, self).predict([X, constraint], **kw_args)
 		
 
-def init(dev_id=0, num_gpu=0, backend='th', num_process=1, use_omp=False, verbose=False):
-	global NUM_PROCESS, DEVICE_ID, DEV, DEVICE_INIT
+def init(dev_id=0, backend='th', num_gpu=0, gpuq=[0], gpu_mem=None, num_process=1, use_omp=False, verbose=False):
+	global NUM_PROCESS, PHSCL_DEV_ID, DEVICE_ID, DEV, DEV_IDQ, DEVICE_INIT
 	if (DEVICE_INIT): return
-	NUM_PROCESS, DEVICE_ID = num_process, dev_id
+	NUM_PROCESS, PHSCL_DEV_ID, DEVICE_ID = num_process, gpuq[dev_id], dev_id
 	os.environ['KERAS_BACKEND'] = BEMAP[backend]
+	DEV_IDQ = ','.join(map(str, gpuq))
+	if (type(gpu_mem) is float and gpu_mem > 0 and gpu_mem <= 1): DEVICE_VARS['gpu_mem'] = gpu_mem
+	DEVICE_VARS['verbose'] = verbose
 	if (backend == 'th'):
 		DEV = 'gpu%i' % dev_id if num_gpu > 0 else 'cpu'
 		os.environ['THEANO_FLAGS'] = re.sub('device=.+,', 'device=%s,' % DEV, os.environ['THEANO_FLAGS'])
@@ -282,33 +313,45 @@ def get_dummy(**kwargs):
 	return Dummy(**kwargs)
 
 
-def gen_mdl(input_dim, output_dim, model, mdl_type='clf', backend='th', verbose=False, udargs=['input_dim', 'output_dim', 'backend', 'device', 'session'], **kwargs):
-	global DEVICE_ID, DEV, DEVICE_INIT, DEVICE_VARS
+# Factory method for generating Keras Model
+def gen_mdl(input_dim, output_dim, model, mdl_type='clf', backend='th', session=None, verbose=False, udargs=['input_dim', 'output_dim', 'backend', 'device', 'session'], **kwargs):
+	global PHSCL_DEV_ID, DEVICE_ID, DEV, DEV_IDQ, DEVICE_INIT, DEVICE_VARS
 	if (not DEVICE_INIT):
 		init(backend=backend)
 	device = DEV
-	session = None
-	if (backend == 'tf'):
+	# Each model keeps one session, create a new one or reuse the previous one
+	if (session is None and backend == 'tf'):
 		import keras.backend.tensorflow_backend as K
 		with gen_cntxt(backend, device):
-			if (device.lower().startswith('gpu')):
+			if (device.lower().startswith('/gpu')):
 				config = K.tf.ConfigProto(allow_soft_placement=True, log_device_placement=verbose)
-				config.gpu_options.per_process_gpu_memory_fraction=0.7
+				config.gpu_options.visible_device_list = DEV_IDQ
+				config.gpu_options.per_process_gpu_memory_fraction=DEVICE_VARS['gpu_mem']
 				config.gpu_options.allow_growth=True
 			else:
 				config = K.tf.ConfigProto(device_count={'gpu':0, 'cpu': 1}, allow_soft_placement=True, inter_op_parallelism_threads=NUM_PROCESS, intra_op_parallelism_threads=NUM_PROCESS, log_device_placement=verbose)
-			session = DEVICE_VARS.setdefault('sess', K.tf.Session(config=config))
-			K.set_session(session)
+			# if DEVICE_VARS.has_key('sess'):
+				# DEVICE_VARS['sess'].close()
+				# del DEVICE_VARS['sess']
+			from numba import cuda
+			try:
+				cuda.get_current_device().reset()
+			except Exception as e:
+				print e
+			K.clear_session()
+			session = K.tf.Session(config=config)
+			# session = DEVICE_VARS.setdefault('sess', K.tf.Session(config=config))
+	K.set_session(session)
 	if (udargs):
 		kwargs.update({k:v for k, v in [(x, locals()[x]) for x in udargs]})
 	if (mdl_type == 'clf'):
-		return BaseWrapper(build_fn=model, **kwargs)
+		return BaseWrapper(build_fn=model, verbose=verbose, **kwargs)
 	elif (mdl_type == 'mlclf'):
-		return MLClassifier(build_fn=model, context=dict(backend=backend, device=device, session=session), **kwargs)
+		return MLClassifier(build_fn=model, context=dict(backend=backend, device=device, session=session), verbose=verbose, **kwargs)
 	elif (mdl_type == 'signedclf'):
-		return SignedClassifier(build_fn=model, context=dict(backend=backend, device=device, session=session), **kwargs) 
+		return SignedClassifier(build_fn=model, context=dict(backend=backend, device=device, session=session), verbose=verbose, **kwargs) 
 	elif (mdl_type == 'clt'):
-		return KerasCluster(build_fn=model, **kwargs)
+		return KerasCluster(build_fn=model, verbose=verbose, **kwargs)
 		
 		
 def gen_cltmdl(proba_thrsh=0.5, context=None, session=None, **kwargs):
@@ -361,7 +404,7 @@ def gen_cntxt(backend='th', device=DEV, session=None):
 		def __exit__(self, type, value, traceback):
 			pass
 	if (not DEVICE_INIT):
-		init(backend=be)
+		init(backend=backend)
 		device = DEV
 	if (backend == 'tf'):
 		return KerasContext(backend, device, session).cntxt

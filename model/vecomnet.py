@@ -17,7 +17,7 @@ import scipy.stats as stats
 from keras.engine.topology import Layer
 from keras.layers import Input, StackedRNNCells, RNN, LSTMCell, LSTM, Dense, Dropout, Lambda, Conv1D, MaxPooling1D, GlobalMaxPooling1D, Subtract, Multiply, Concatenate
 from keras.models import Model, Sequential, clone_model
-from keras.optimizers import SGD
+from keras.optimizers import SGD, TFOptimizer
 from keras.utils import plot_model
 import keras.backend as K
 
@@ -63,28 +63,44 @@ def _vecomnet_loss(Y_true, Y_pred, weights=None):
 CUSTOM_LOSS = {'_vecomnet_loss':_vecomnet_loss, 'w_binary_crossentropy':w_binary_crossentropy}
 	
 
-def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backend='tf', device='', session=None, lstm_dim=128, lstm_num=2, ent_mlp_dim=128, evnt_mlp_dim=64, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None, precomp_vec=None):
-	with kerasext.gen_cntxt(backend, device):
+def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=None, backend='tf', device='', session=None, cross_device=True, mltl_accc=False, lstm_dim=128, lstm_num=2, ent_mlp_dim=128, evnt_mlp_dim=64, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None, precomp_vec=None):
+	main_cntxt = dict(device='/cpu:0') if cross_device else dict(device=device, session=session)
+	with kerasext.gen_cntxt(backend, **main_cntxt):
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(4)]
 		if (pretrain_vecmdl is None and precomp_vec is None):
 			w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
-			embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordVector%i'%i)(x) for i, x in enumerate(X_inputs)]
-			embeddings = [Dropout(drop_ratio, name='WordEmbedding%i-Rgl'%i)(embd) for i, embd in enumerate(embeddings)]
-			# lstms = [RNN([LSTMCell(lstm_dim)] * lstm_num, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
-			lstms = [LSTM(lstm_dim, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
-			# lstms = [Dropout(drop_ratio, name='BidirectionalLSTM%i-%s-Rgl'%(i/2,'FW' if i%2==0 else 'BW'))(lstm) for i, lstm in enumerate(lstms)]
-			cbow_cntxts = [Concatenate(name='CBOW0')(lstms[:2]), Concatenate(name='CBOW1')(lstms[2:])]
-			mlps = [Dense(ent_mlp_dim, activation='tanh', input_shape=(lstm_dim*2,), name='MLP%i-L1'%i)(cntxt) for i, cntxt in enumerate(cbow_cntxts)]
-			mlps = [Dropout(drop_ratio, name='MLP%i-L1-Rgl'%i)(x) for i, x in enumerate(mlps)]
-			mlps = [Dense(ent_mlp_dim, activation='tanh', input_shape=(ent_mlp_dim,), name='MLP%i-L2'%i)(x) for i, x in enumerate(mlps)]
-			mlps = [Dropout(drop_ratio, name='MLP%i-L2-Rgl'%i)(x) for i, x in enumerate(mlps)]
-			mlps = [Dense(output_dim, activation='sigmoid', name='ENTITY%i'%i)(x) for i, x in enumerate(mlps)]
-			vecom = Subtract(name='VecCom')(mlps)
-			# mlps = [[Dense(ent_mlp_dim, activation='tanh', input_shape=(lstm_dim*2,), name='MLP%i.%i-L1'%(i,j))(cntxt) for j in range(output_dim)] for i, cntxt in enumerate(cbow_cntxts)]
-			# mlps = [[Dropout(drop_ratio, name='MLP%i.%i-L1-Rgl'%(i,j))(y) for j, y in enumerate(x)] for i, x in enumerate(mlps)]
-			# mlps = [[Dense(ent_mlp_dim, activation='tanh', input_shape=(ent_mlp_dim,), name='MLP%i.%i-L2'%(i,j))(y) for j, y in enumerate(x)] for i, x in enumerate(mlps)]
-			# mlps = [[Dropout(drop_ratio, name='MLP%i.%i-L2-Rgl'%(i,j))(y) for j, y in enumerate(x)] for i, x in enumerate(mlps)]
-			# vecom = Subtract(name='VecCom')([Concatenate(name='ENTITY%i'%i)(x) for i, x in enumerate(mlps)])
+			if (cw2v_path is not None and os.path.exists(cw2v_path)): # Append the concept embeddings to the original word embeddings layer
+				print 'Using alternative concept embedding model!'
+				cw2v_wrapper = w2v.GensimW2VWrapper(cw2v_path)
+				word_embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding%i'%i)(crop(1, 0, input_dim)(x)) for i, x in enumerate(X_inputs)]
+				cncpt_embeddings = [cw2v_wrapper.get_embedding_layer(type='keras', name='ConceptEmbedding%i'%i)(crop(1, input_dim - 1, input_dim)(x)) for i, x in enumerate(X_inputs)]
+				w2v_dim, cw2v_dim = w2v_wrapper.get_dim(), cw2v_wrapper.get_dim()
+				if (w2v_dim > cw2v_dim):
+					dummy_tensor = [fill(2, 0, w2v_dim - cw2v_dim)(crop(2, 0, 1)(x)) for x in cncpt_embeddings]
+					cncpt_embeddings = [Concatenate(axis=2)([cmbd, dummy]) for cmbd, dummy in zip(cncpt_embeddings, dummy_tensor)]
+				elif (cw2v_dim > w2v_dim):
+					dummy_tensor = [fill(2, 0, cw2v_dim - w2v_dim)(crop(2, 0, 1)(x)) for x in word_embeddings]
+					word_embeddings = [Concatenate(axis=2)([wmbd, dummy]) for wmbd, dummy in zip(word_embeddings, dummy_tensor)]
+				embeddings = [Concatenate(axis=1, name='FusionEmbedding%i'%i)([wmbd, cmbd]) for i, (wmbd, cmbd) in enumerate(zip(word_embeddings, cncpt_embeddings))]
+			else:
+				embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordVector%i'%i)(x) for i, x in enumerate(X_inputs)]
+			with kerasext.gen_cntxt(backend, device, session=session):
+				embeddings = [Dropout(drop_ratio, name='WordEmbedding%i-Rgl'%i)(embd) for i, embd in enumerate(embeddings)]
+				# lstms = [RNN([LSTMCell(lstm_dim)] * lstm_num, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
+				lstms = [LSTM(lstm_dim, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
+				# lstms = [Dropout(drop_ratio, name='BidirectionalLSTM%i-%s-Rgl'%(i/2,'FW' if i%2==0 else 'BW'))(lstm) for i, lstm in enumerate(lstms)]
+				cbow_cntxts = [Concatenate(name='CBOW0')(lstms[:2]), Concatenate(name='CBOW1')(lstms[2:])]
+				mlps = [Dense(ent_mlp_dim, activation='tanh', input_shape=(lstm_dim*2,), name='MLP%i-L1'%i)(cntxt) for i, cntxt in enumerate(cbow_cntxts)]
+				mlps = [Dropout(drop_ratio, name='MLP%i-L1-Rgl'%i)(x) for i, x in enumerate(mlps)]
+				mlps = [Dense(ent_mlp_dim, activation='tanh', input_shape=(ent_mlp_dim,), name='MLP%i-L2'%i)(x) for i, x in enumerate(mlps)]
+				mlps = [Dropout(drop_ratio, name='MLP%i-L2-Rgl'%i)(x) for i, x in enumerate(mlps)]
+				mlps = [Dense(output_dim, activation='sigmoid', name='ENTITY%i'%i)(x) for i, x in enumerate(mlps)]
+				vecom = Subtract(name='VecCom')(mlps)
+				# mlps = [[Dense(ent_mlp_dim, activation='tanh', input_shape=(lstm_dim*2,), name='MLP%i.%i-L1'%(i,j))(cntxt) for j in range(output_dim)] for i, cntxt in enumerate(cbow_cntxts)]
+				# mlps = [[Dropout(drop_ratio, name='MLP%i.%i-L1-Rgl'%(i,j))(y) for j, y in enumerate(x)] for i, x in enumerate(mlps)]
+				# mlps = [[Dense(ent_mlp_dim, activation='tanh', input_shape=(ent_mlp_dim,), name='MLP%i.%i-L2'%(i,j))(y) for j, y in enumerate(x)] for i, x in enumerate(mlps)]
+				# mlps = [[Dropout(drop_ratio, name='MLP%i.%i-L2-Rgl'%(i,j))(y) for j, y in enumerate(x)] for i, x in enumerate(mlps)]
+				# vecom = Subtract(name='VecCom')([Concatenate(name='ENTITY%i'%i)(x) for i, x in enumerate(mlps)])
 		elif (precomp_vec is None):
 			mdls = [clone_model(pretrain_vecmdl), clone_model(pretrain_vecmdl)]
 			# for mdl in mdls:
@@ -97,6 +113,7 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backend='tf'
 		else:
 			X_inputs = [Input(shape=(input_dim,), dtype='float32', name=name) for i, name in enumerate(['LF-ENTITY', 'RT-ENTITY'])]
 			vecom = Subtract(name='VecCom')(X_inputs)
+	with kerasext.gen_cntxt(backend, device, session=session):
 		# vecom = Dropout(drop_ratio, name='VecCom-Rgl')(vecom)
 		vecom_abs = Lambda(lambda x: K.abs(x), name='AbsVecCom')(vecom)
 		event = Dense(evnt_mlp_dim, activation='relu', name='EVENT-L1')(vecom_abs)
@@ -119,16 +136,37 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backend='tf'
 		loss = func.wrapped_partial(w_binary_crossentropy, weights=class_weight.mean(axis=0) if (output_dim > 1 and class_weight is not None) else class_weight)
 		optmzr = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
 		plot_model(model, show_shapes=True, to_file='model.png')
-		model.compile(optimizer=optmzr, loss='binary_crossentropy', metrics=['acc', 'mse'])
+		kwargs = {}
+		if (backend == 'tf'):
+			import tensorflow as tf
+			# kwargs['options'] = tf.RunOptions(report_tensor_allocations_upon_oom=True) # Will crash if low memory
+			optmzr = TFOptimizer(tf.train.GradientDescentOptimizer(learning_rate=0.1))
+		model.compile(optimizer=optmzr, loss='binary_crossentropy', metrics=['acc', 'mse'], **kwargs)
 	return model
 	
 	
-def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backend='tf', device='', session=None, conv_dim=128, conv_ksize=4, maxp_size=2, lstm_dim=128, lstm_num=2, mlp_dim=128, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None):
+def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=None, backend='tf', device='', session=None, cross_device=True, mltl_accc=False, conv_dim=128, conv_ksize=4, maxp_size=2, lstm_dim=128, lstm_num=2, mlp_dim=128, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None):
 	if (pretrain_vecmdl is not None): return pretrain_vecmdl
-	with kerasext.gen_cntxt(backend, device):
+	main_cntxt = dict(device='/cpu:0') if cross_device else dict(device=device, session=session)
+	with kerasext.gen_cntxt(backend, **main_cntxt):
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(2)]
 		w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
-		embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding%i'%i)(x) for i, x in enumerate(X_inputs)]
+		if (cw2v_path is not None and os.path.exists(cw2v_path)): # Append the concept embeddings to the original word embeddings layer
+			print 'Using alternative concept embedding model!'
+			cw2v_wrapper = w2v.GensimW2VWrapper(cw2v_path)
+			word_embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding%i'%i)(crop(1, 0, input_dim)(x)) for i, x in enumerate(X_inputs)]
+			cncpt_embeddings = [cw2v_wrapper.get_embedding_layer(type='keras', name='ConceptEmbedding%i'%i)(crop(1, input_dim - 1, input_dim)(x)) for i, x in enumerate(X_inputs)]
+			w2v_dim, cw2v_dim = w2v_wrapper.get_dim(), cw2v_wrapper.get_dim()
+			if (w2v_dim > cw2v_dim):
+				dummy_tensor = [fill(2, 0, w2v_dim - cw2v_dim)(crop(2, 0, 1)(x)) for x in cncpt_embeddings]
+				cncpt_embeddings = [Concatenate(axis=2)([cmbd, dummy]) for cmbd, dummy in zip(cncpt_embeddings, dummy_tensor)]
+			elif (cw2v_dim > w2v_dim):
+				dummy_tensor = [fill(2, 0, cw2v_dim - w2v_dim)(crop(2, 0, 1)(x)) for x in word_embeddings]
+				word_embeddings = [Concatenate(axis=2)([wmbd, dummy]) for wmbd, dummy in zip(word_embeddings, dummy_tensor)]
+			embeddings = [Concatenate(axis=1, name='FusionEmbedding%i'%i)([wmbd, cmbd]) for i, (wmbd, cmbd) in enumerate(zip(word_embeddings, cncpt_embeddings))]
+		else:
+			embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding%i'%i)(x) for i, x in enumerate(X_inputs)]
+	with kerasext.gen_cntxt(backend, device, session=session):
 		embeddings = [Dropout(drop_ratio, name='WordEmbedding%i-Rgl'%i)(embd) for i, embd in enumerate(embeddings)]
 		# lstms = [RNN([LSTMCell(lstm_dim)] * lstm_num, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
 		lstms = [LSTM(lstm_dim, name='BidirectionalLSTM-%s'%('FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
@@ -154,7 +192,12 @@ def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backend='tf
 		optmzr = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
 		loss = func.wrapped_partial(w_binary_crossentropy, weights=class_weight.mean(axis=0) if (output_dim > 1 and class_weight is not None) else class_weight)
 		plot_model(model, show_shapes=True, to_file='model.png')
-		model.compile(optimizer=optmzr, loss=loss, metrics=['acc', 'mse'])
+		kwargs = {}
+		if (backend == 'tf'):
+			import tensorflow as tf
+			# kwargs['options'] = tf.RunOptions(report_tensor_allocations_upon_oom=True) # Will crash if low memory
+			optmzr = TFOptimizer(tf.train.GradientDescentOptimizer(learning_rate=0.1))
+		model.compile(optimizer=optmzr, loss=loss, metrics=['acc', 'mse'], **kwargs)
 	return model
 	
 	
@@ -183,3 +226,23 @@ def mlmt_vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backen
 		predict_model = Model(X_inputs, output)
 		plot_model(predict_model, show_shapes=True, to_file='model.png')
 	return train_models, predict_model
+	
+def crop(axis, start, end):
+	def func(x):
+		if axis == 0:
+			return x[start:end]
+		if axis == 1:
+			return x[:,start:end]
+		if axis == 2:
+			return x[:,:,start:end]
+		if axis == 3:
+			return x[:,:,:,start:end]
+		if axis == 4:
+			return x[:,:,:,:,start:end]
+	return Lambda(func)
+	
+	
+def fill(axis, val=0, rep=1, expand_dims=False):
+	def func(x):
+		return K.repeat_elements(val * K.ones_like(K.expand_dims(x, axis=axis)), rep=rep, axis=axis) if expand_dims else K.repeat_elements(val * K.ones_like(x), rep=rep, axis=axis)
+	return Lambda(func)
