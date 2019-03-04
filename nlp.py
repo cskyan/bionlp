@@ -185,13 +185,29 @@ def corenlp2tree(sentence):
 		yield int(idx), int(head_idx), rel
 	
 	
-def dpnd_trnsfm(dict_data, shape):
+def dpnd_trnsfm(dict_data, shape, encoding='categorical', **kwargs):
 	from scipy.sparse import coo_matrix
 	idx_list, v_list = zip(*dict_data.items())
 	idx_list = np.array(idx_list)
 	# Convert the value vector to a singular
 	int_func = np.frompyfunc(int, 1, 1)
-	hash_func = np.frompyfunc(lambda x: int(x) if str(x).isdigit() else 1, 1, 1)
+	if (encoding == 'binary'):
+		hash_func = np.frompyfunc(lambda x: 1 if x and not str(x).isspace() else 0, 1, 1)
+	elif (encoding == 'categorical'): # 0: No relation; others: relation types
+		class_lbs = set(map(str.strip, map(str, v_list)))
+		try:
+			class_lbs.remove('')
+		except:
+			pass
+		if kwargs.has_key('class_lbmap'):
+			orig_class_num = len(kwargs['class_lbmap'])
+			class_lbs -= set(kwargs['class_lbmap'].keys())
+			class_lbmap = func.update_dict(kwargs['class_lbmap'], dict(zip(class_lbs, range(orig_class_num, orig_class_num + len(class_lbs)))))
+		else:
+			class_lbmap = dict(zip(class_lbs, np.arange(len(class_lbs))+1))
+		hash_func = np.frompyfunc(lambda x: class_lbmap.setdefault(str(x), 0), 1, 1)
+	else:
+		hash_func = np.frompyfunc(lambda x: int(x) if str(x).isdigit() else 1, 1, 1)
 	idx_list = int_func(idx_list)
 	data = hash_func(v_list)
 	return coo_matrix((data, (idx_list[:,0], idx_list[:,1])), shape=shape, dtype='int32')
@@ -211,7 +227,7 @@ def set_mt_point(id, pid, relation, mt={}, tree_shape='symm'):
 	return mt
 
 
-def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cache_path=None, **kwargs):			
+def parse(text, method='spacy', fmt='mt', tree_shape='symm', dpnd_encoding='categorical', dpnd_classmap={}, cached_id=None, cache_path=None, **kwargs):
 	# From cache
 	if (cached_id is not None):
 		cache_path = os.path.join('.', '.parsed') if cache_path is None else cache_path
@@ -240,7 +256,7 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cac
 			for w in sent:
 				set_mt_point(w.i - offset, w.head.i - offset, w.dep_, sub_dpnd_mt, tree_shape=tree_shape)
 			if (len(sub_dpnd_mt) > 0):
-				sdmt = dpnd_trnsfm(sub_dpnd_mt, (len(sent), len(sent)))
+				sdmt = dpnd_trnsfm(sub_dpnd_mt, (len(sent), len(sent)), encoding=dpnd_encoding, class_lbmap=dpnd_classmap)
 				sddf = pd.DataFrame(sdmt.tocsr().todense())
 			dpnd_dfs.append(sddf)
 			offset += len(sent)
@@ -264,7 +280,7 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cac
 				id, pid = token.index - 1, token.head - 1
 				set_mt_point(id, pid, token.deprel, sub_dpnd_mt, tree_shape=tree_shape)
 			if (len(sub_dpnd_mt) > 0):
-				sdmt = dpnd_trnsfm(sub_dpnd_mt, (len(token_list), len(token_list)))
+				sdmt = dpnd_trnsfm(sub_dpnd_mt, (len(token_list), len(token_list)), class_lbmap=dpnd_classmap)
 				sddf = pd.DataFrame(sdmt.tocsr().todense())
 			tokens.append(token_list)
 			dpnd_dfs.append(sddf)
@@ -290,7 +306,7 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cac
 				id, pid = id - 1, pid - 1
 				set_mt_point(id, pid, rel, sub_dpnd_mt, tree_shape=tree_shape)
 			if (len(sub_dpnd_mt) > 0):
-				sdmt = dpnd_trnsfm(sub_dpnd_mt, (len(sent['words']), len(sent['words'])))
+				sdmt = dpnd_trnsfm(sub_dpnd_mt, (len(sent['words']), len(sent['words'])), class_lbmap=dpnd_classmap)
 				sddf = pd.DataFrame(sdmt.tocsr().todense())
 			dpnd_dfs.append(sddf)
 		coref = sents.setdefault('coref', [])
@@ -301,11 +317,11 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cac
 	return tokens, dpnd_dfs, coref
 
 	
-def parse_all(text, method='spacy', fmt='mt', tree_shape='symm', cached_id=None, cache_path=None, **kwargs):	
+def parse_all(text, method='spacy', fmt='mt', tree_shape='symm', dpnd_encoding='categorical', dpnd_classmap={}, cached_id=None, cache_path=None, **kwargs):	
 	sf_tokens, sf_dpnd_dfs, sf_coref = parse(text, method=method, fmt=fmt, tree_shape=tree_shape, cached_id=cached_id, cache_path=cache_path)
 	if (method == 'stanford'):
 		return sf_tokens, sf_dpnd_dfs, sf_coref
-	tokens, dpnd_dfs, coref = parse(text, method=method, fmt=fmt, tree_shape=tree_shape, cached_id=cached_id, cache_path=cache_path, **kwargs)
+	tokens, dpnd_dfs, coref = parse(text, method=method, fmt=fmt, tree_shape=tree_shape, dpnd_encoding=dpnd_encoding, dpnd_classmap=dpnd_classmap, cached_id=cached_id, cache_path=cache_path, **kwargs)
 	# Coreference resolution
 	sftkns2tokens, tokens2sftkns = annot_list_align([[[token['loc']] for token in token_list] for token_list in sf_tokens], [[token['loc'] for token in token_list] for token_list in tokens], error=0)
 	coref = [[((pairs[0][0], sftkns2tokens[pairs[0][1]][pairs[0][2]][0][0], sftkns2tokens[pairs[0][1]][pairs[0][2]][0][1], sftkns2tokens[pairs[0][1]][pairs[0][3]][0][1], sftkns2tokens[pairs[0][1]][min(pairs[0][4], len(sftkns2tokens[pairs[0][1]]) - 1)][0][1]), (pairs[1][0], sftkns2tokens[pairs[1][1]][pairs[1][2]][0][0], sftkns2tokens[pairs[1][1]][pairs[1][2]][0][1], sftkns2tokens[pairs[1][1]][pairs[1][3]][0][1], sftkns2tokens[pairs[1][1]][min(pairs[1][4], len(sftkns2tokens[pairs[1][1]]) - 1)][0][1])) for pairs in crf] for crf in sf_coref] # The word offset in coreference resolution of Stanford parser may exceed the number of return tokens
