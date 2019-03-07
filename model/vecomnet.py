@@ -69,11 +69,13 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=No
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(4)]
 		if (pretrain_vecmdl is None and precomp_vec is None):
 			w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
+			embd_layer = w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding')
 			if (cw2v_path is not None and os.path.exists(cw2v_path)): # Append the concept embeddings to the original word embeddings layer
 				print 'Using alternative concept embedding model!'
 				cw2v_wrapper = w2v.GensimW2VWrapper(cw2v_path)
-				word_embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding%i'%i)(crop(1, 0, input_dim)(x)) for i, x in enumerate(X_inputs)]
-				cncpt_embeddings = [cw2v_wrapper.get_embedding_layer(type='keras', name='ConceptEmbedding%i'%i)(crop(1, input_dim - 1, input_dim)(x)) for i, x in enumerate(X_inputs)]
+				cncpt_embd_layer = cw2v_wrapper.get_embedding_layer(type='keras', name='ConceptEmbedding')
+				word_embeddings = [embd_layer(crop(1, 0, input_dim)(x)) for i, x in enumerate(X_inputs)]
+				cncpt_embeddings = [cncpt_embd_layer(crop(1, input_dim - 1, input_dim)(x)) for i, x in enumerate(X_inputs)]
 				w2v_dim, cw2v_dim = w2v_wrapper.get_dim(), cw2v_wrapper.get_dim()
 				if (w2v_dim > cw2v_dim):
 					dummy_tensor = [fill(2, 0, w2v_dim - cw2v_dim)(crop(2, 0, 1)(x)) for x in cncpt_embeddings]
@@ -83,7 +85,7 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=No
 					word_embeddings = [Concatenate(axis=2)([wmbd, dummy]) for wmbd, dummy in zip(word_embeddings, dummy_tensor)]
 				embeddings = [Concatenate(axis=1, name='FusionEmbedding%i'%i)([wmbd, cmbd]) for i, (wmbd, cmbd) in enumerate(zip(word_embeddings, cncpt_embeddings))]
 			else:
-				embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordVector%i'%i)(x) for i, x in enumerate(X_inputs)]
+				embeddings = [embd_layer(x) for i, x in enumerate(X_inputs)]
 			with kerasext.gen_cntxt(backend, device, session=session):
 				embeddings = [Dropout(drop_ratio, name='WordEmbedding%i-Rgl'%i)(embd) for i, embd in enumerate(embeddings)]
 				# lstms = [RNN([LSTMCell(lstm_dim)] * lstm_num, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
@@ -151,11 +153,12 @@ def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=N
 	with kerasext.gen_cntxt(backend, **main_cntxt):
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(2)]
 		w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
+		embd_layer = w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding')
 		if (cw2v_path is not None and os.path.exists(cw2v_path)): # Append the concept embeddings to the original word embeddings layer
 			print 'Using alternative concept embedding model!'
 			cw2v_wrapper = w2v.GensimW2VWrapper(cw2v_path)
-			word_embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding%i'%i)(crop(1, 0, input_dim)(x)) for i, x in enumerate(X_inputs)]
-			cncpt_embeddings = [cw2v_wrapper.get_embedding_layer(type='keras', name='ConceptEmbedding%i'%i)(crop(1, input_dim - 1, input_dim)(x)) for i, x in enumerate(X_inputs)]
+			word_embeddings = [embd_layer(crop(1, 0, input_dim)(x)) for i, x in enumerate(X_inputs)]
+			cncpt_embeddings = [embd_layer(crop(1, input_dim - 1, input_dim)(x)) for i, x in enumerate(X_inputs)]
 			w2v_dim, cw2v_dim = w2v_wrapper.get_dim(), cw2v_wrapper.get_dim()
 			if (w2v_dim > cw2v_dim):
 				dummy_tensor = [fill(2, 0, w2v_dim - cw2v_dim)(crop(2, 0, 1)(x)) for x in cncpt_embeddings]
@@ -165,7 +168,7 @@ def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=N
 				word_embeddings = [Concatenate(axis=2)([wmbd, dummy]) for wmbd, dummy in zip(word_embeddings, dummy_tensor)]
 			embeddings = [Concatenate(axis=1, name='FusionEmbedding%i'%i)([wmbd, cmbd]) for i, (wmbd, cmbd) in enumerate(zip(word_embeddings, cncpt_embeddings))]
 		else:
-			embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding%i'%i)(x) for i, x in enumerate(X_inputs)]
+			embeddings = [embd_layer(x) for i, x in enumerate(X_inputs)]
 	with kerasext.gen_cntxt(backend, device, session=session):
 		embeddings = [Dropout(drop_ratio, name='WordEmbedding%i-Rgl'%i)(embd) for i, embd in enumerate(embeddings)]
 		# lstms = [RNN([LSTMCell(lstm_dim)] * lstm_num, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
@@ -205,7 +208,8 @@ def mlmt_vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backen
 	with kerasext.gen_cntxt(backend, device):
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(2)]
 		w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
-		embeddings = [w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding%i'%i)(x) for i, x in enumerate(X_inputs)]
+		embd_layer = w2v_wrapper.get_embedding_layer(type='keras', name='WordEmbedding')
+		embeddings = [embd_layer(x) for i, x in enumerate(X_inputs)]
 		embeddings = [Dropout(drop_ratio, name='WordEmbedding%i-Rgl'%i)(embd) for i, embd in enumerate(embeddings)]
 		lstms = [LSTM(lstm_dim, name='BidirectionalLSTM-%s'%('FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
 		cbow_cntxt = concatenate(lstms, name='CBOW')
