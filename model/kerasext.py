@@ -9,7 +9,7 @@
 ###########################################################################
 ''' Keras Deep Learning Model '''
 
-import os, re, sys, traceback
+import os, re, sys, time, traceback
 
 import numpy as np
 from sklearn.utils import class_weight
@@ -54,7 +54,7 @@ class BaseWrapper(KerasClassifier):
 	def predict(self, X, **kw_args):
 		with gen_cntxt(**self.context):
 			return super(BaseWrapper, self).predict(X, **kw_args)
-	def save(self, fname='kerasmdl', sep_arch=False, skip_layers=[], save_alone=[], over_write=True, save_history=True):
+	def save(self, fname='kerasmdl', sep_arch=False, skip_layers=[], save_alone=[], alone_noprfx=False, over_write=True, save_history=True):
 		fname = os.path.splitext(fname)[0]
 		model_params = self.filter_sk_params(self.build_fn)
 		build_fn, sk_params, model, histories, context = self.build_fn, self.sk_params, self.model, self.histories, self.context
@@ -69,21 +69,27 @@ class BaseWrapper(KerasClassifier):
 				import h5py
 			except ImportError:
 				h5py = None
+			try:
+				import h5py_cache as h5py
+				h5kwargs = dict(chunk_cache_mem_size=4*1024**2)
+			except ImportError:
+				h5py = h5py
+				h5kwargs = {}
 			if h5py is None:
 				raise ImportError('`save_weights` requires h5py.')
 			if (len(ignored_layers) == 0):
 				model.save_weights('%s.h5' % fname)
 			else:
 				filepath = '%s.h5' % fname
-				with h5py.File(filepath, 'w') as f:
+				with h5py.File(filepath, 'w', **h5kwargs) as f:
 					saving.save_weights_to_hdf5_group(f, filtered_layers)
 					f.flush()
 			for layer_names in save_alone:
 				layer_names = layer_names if type(layer_names) is list else [layer_names]
 				layers = [x for x in model.layers if x.name in layer_names]
-				filepath = fname + '_%s' % '_'.join(map(str.lower, layer_names)).replace(' ', '_').replace('-', '_') + '.h5'
+				filepath = ('' if alone_noprfx else ('%s_' % fname)) + '_'.join(map(str.lower, layer_names)).replace(' ', '_').replace('-', '_') + '.h5'
 				if (len(layers) == 0 or (not over_write and os.path.isfile(filepath))): continue
-				with h5py.File(filepath, 'w') as f:
+				with h5py.File(filepath, mode='w', **h5kwargs) as f:
 					saving.save_weights_to_hdf5_group(f, layers)
 					f.flush()
 		else:
@@ -91,7 +97,7 @@ class BaseWrapper(KerasClassifier):
 		if (save_history):
 			io.write_obj([his.history for his in histories], '%s_histories' % fname)
 		self.build_fn, self.sk_params, self.model, self.context = build_fn, sk_params, model, context
-	def load(self, fname='kerasmdl', custom_objects={}, sep_arch=False, load_alone=[]):
+	def load(self, fname='kerasmdl', custom_objects={}, sep_arch=False, load_alone=[], alone_noprfx=False):
 		fname = os.path.splitext(fname)[0]
 		if (sep_arch):
 			from keras.engine import saving
@@ -104,14 +110,20 @@ class BaseWrapper(KerasClassifier):
 				import h5py
 			except ImportError:
 				h5py = None
+			try:
+				import h5py_cache as h5py
+				h5kwargs = dict(chunk_cache_mem_size=2*1024**2)
+			except ImportError:
+				h5py = h5py
+				h5kwargs = {}
 			if h5py is None:
 				raise ImportError('`save_weights` requires h5py.')
 			for layer_names in load_alone:
 				layer_names = layer_names if type(layer_names) is list else [layer_names]
 				layers = [x for x in self.model.layers if x.name in layer_names]
-				filepath = fname + '_%s' % '_'.join(map(str.lower, layer_names)).replace(' ', '_').replace('-', '_') + '.h5'
+				filepath = ('' if alone_noprfx else '%s_' % fname) + '_'.join(map(str.lower, layer_names)).replace(' ', '_').replace('-', '_') + '.h5'
 				if (not os.path.isfile(filepath)): continue
-				with h5py.File(filepath, mode='r') as f:
+				with h5py.File(filepath, mode='r', libver='latest', swmr=True, **h5kwargs) as f:
 					if 'layer_names' not in f.attrs and 'model_weights' in f:
 						f = f['model_weights']
 					saving.load_weights_from_hdf5_group(f, layers, reshape=True)
@@ -199,9 +211,9 @@ class MLClassifier(BaseWrapper):
 		if probs.shape[-1] == 1:
 			probs = np.hstack([1 - probs, probs])
 		return probs
-	def save(self, fname='kerasmdl', sep_arch=False, skip_layers=[], save_alone=[], over_write=True, save_history=True):
+	def save(self, fname='kerasmdl', sep_arch=False, skip_layers=[], save_alone=[], alone_noprfx=False, over_write=True, save_history=True):
 		if (not self.mlmt):
-			super(MLClassifier, self).save(fname=fname, sep_arch=sep_arch, skip_layers=skip_layers, save_alone=save_alone, over_write=over_write, save_history=save_history)
+			super(MLClassifier, self).save(fname=fname, sep_arch=sep_arch, skip_layers=skip_layers, save_alone=save_alone, alone_noprfx=alone_noprfx, over_write=over_write, save_history=save_history)
 		else:
 			# For MLMT Model
 			model_params = self.filter_sk_params(self.build_fn)
@@ -222,9 +234,9 @@ class MLClassifier(BaseWrapper):
 				for i, history in enumerate(histories):
 					io.write_obj([his.history for his in history], '%s_histories_%i' % (fname, i))
 			self.build_fn, self.sk_params, self.train_models, self.predict_model, self.context = build_fn, sk_params, train_models, predict_model, context
-	def load(self, fname='kerasmdl', custom_objects={}, sep_arch=False, load_alone=[]):
+	def load(self, fname='kerasmdl', custom_objects={}, sep_arch=False, load_alone=[], alone_noprfx=False):
 		if (not self.mlmt):
-			super(MLClassifier, self).load(fname=fname, custom_objects=custom_objects, sep_arch=sep_arch, load_alone=load_alone)
+			super(MLClassifier, self).load(fname=fname, custom_objects=custom_objects, sep_arch=sep_arch, load_alone=load_alone, alone_noprfx=alone_noprfx)
 		else:
 			# For MLMT Model
 			basename = os.path.splitext(os.path.basename(fname))[0]
@@ -382,7 +394,13 @@ def gen_mdl(input_dim, output_dim, model, mdl_type='clf', backend='th', session=
 			except Exception as e:
 				print e
 			K.clear_session()
-			session = K.tf.Session(config=config)
+			while True:
+				try:
+					session = K.tf.Session(config=config)
+					break
+				except Exception as e:
+					print e
+					time.sleep(5)
 			# session = DEVICE_VARS.setdefault('sess', K.tf.Session(config=config))
 	K.set_session(session)
 	if (udargs):
