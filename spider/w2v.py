@@ -64,7 +64,9 @@ class GensimW2VWrapper(object):
 		weights = self.get_weights()
 		if (type == 'keras'):
 			from keras.layers import Embedding
+			from keras.initializers import Constant
 			return Embedding(input_dim=weights.shape[0], output_dim=weights.shape[1], weights=[weights], **kwargs)
+			# return Embedding(input_dim=weights.shape[0], output_dim=weights.shape[1], embeddings_initializer=Constant(value=weights), **kwargs)
 			
 	def get_text_stream(text, input_mode='sentence', output_mode='sentence', to_idx=True, batch_size=1000, n_jobs=1):
 		import spacy
