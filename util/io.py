@@ -14,6 +14,8 @@ import sys
 import yaml
 import json
 import time
+import fcntl
+import errno
 import cStringIO
 import cPickle as pickle
 import numpy as np
@@ -251,3 +253,22 @@ def cfg_reader(fpath):
 			print 'Parameters of function %s does not exist.' % func
 			return {}
 	return get_params
+	
+	
+def lockf(flpath, wait_time=1):
+	x = flpath if type(flpath) is file else open(flpath, 'w+')
+	while True:
+		try:
+			fcntl.flock(x, fcntl.LOCK_EX | fcntl.LOCK_NB)
+			break
+		except IOError as e:
+			if e.errno != errno.EAGAIN:
+				raise
+			else:
+				time.sleep(wait_time)
+	return x
+				
+def unlockf(flpath):
+	x = flpath if type(flpath) is file else open(flpath, 'w+')
+	fcntl.flock(x, fcntl.LOCK_UN)
+	x.close()
