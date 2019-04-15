@@ -28,8 +28,8 @@ def split_1d(task_num, split_num=None, task_size=None, split_size=None, ret_idx=
 		remainder = task_num % split_num
 		results = [group_size] * split_num if (remainder == 0) else [group_size + 1] * remainder + [group_size] * (split_num - remainder)
 	return np.cumsum([0]+results).tolist() if ret_idx else results
-		
-		
+
+
 def split_2d(task_grid, split_num=None, task_size=None, split_size=None, ret_idx=False):
 	if (split_num is None):
 		if (task_size is None or split_size is None):
@@ -49,7 +49,7 @@ def split_2d(task_grid, split_num=None, task_size=None, split_size=None, ret_idx
 			grid[(_grid % 1).argmax()] += 1
 		results = [split_1d(task_grid[0], split_num=grid[0]), split_1d(task_grid[1], split_num=grid[1])]
 	return [np.cumsum([0]+results[0]).tolist(), np.cumsum([0]+results[1]).tolist()] if ret_idx else results
-		
+
 
 def run(target, **kwargs):
 	p = Process(target=target, kwargs=kwargs)
@@ -84,8 +84,8 @@ def run_pool(target, n_jobs=1, pool=None, ret_pool=False, dist_param=[], **kwarg
 	pool.close()
 	pool.join()
 	return res_list
-	
-	
+
+
 def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kwargs):
 	from subprocess import Popen
 	import ipyparallel as ipp
@@ -144,3 +144,22 @@ def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kw
 			time.sleep(5)
 			pend.terminate()
 		return []
+
+
+def get_lock_mltproc():
+	from multiprocessing import Lock
+	return Lock()
+
+def get_lock_ipp():
+	return None
+
+def get_queue_mltproc(type='simple'):
+	if (type == 'simple'):
+		from multiprocessing.queues import SimpleQueue
+		return SimpleQueue()
+	elif (type == 'joinable'):
+		from multiprocessing.queues import Joinable
+		return Joinable()
+
+def get_queue_ipp():
+	return None
