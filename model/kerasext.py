@@ -252,7 +252,7 @@ class MLClassifier(BaseWrapper):
 				self.train_models = [load_model(fpath, custom_objects=custom_objects) for fpath in fs.listf(os.path.dirname(os.path.abspath(fname)), pattern='train_%s_.*' % basename, full_path=True)]
 				self.predict_model = load_model(os.path.join(os.path.dirname(fname), 'predict_%s.h5' % basename), custom_objects=custom_objects)
 
-		
+
 'Signed Label Classifier'
 class SignedClassifier(BaseWrapper):
 	def predict(self, X, **kw_args):
@@ -281,13 +281,13 @@ class SignedClassifier(BaseWrapper):
 			probs = np.nan_to_num(probs)
 		return probs
 
-		
+
 class KerasCluster(KerasClassifier):
 	def __init__(self, batch_size=32, **kw_args):
 		self.kw_args = kw_args
 		self.batch_size = batch_size
 		# self.attributes.extend(['batch_size'])
-		super(KerasCluster, self).__init__(build_fn=build_fn)
+		super(KerasCluster, self).__init__(**kw_args)
 	def fit(self, X, y, constraint=None, **kw_args):
 		if self.build_fn is None:
 			self.model = self.__call__(**self.filter_sk_params(self.__call__))
@@ -314,9 +314,9 @@ class KerasCluster(KerasClassifier):
 			return super(KerasCluster, self).predict(X, **kw_args)
 		else:
 			return super(KerasCluster, self).predict([X, constraint], **kw_args)
-		
 
-def init(dev_id=0, backend='th', num_gpu=0, gpuq=[0], gpu_mem=None, num_process=1, use_omp=False, verbose=False):
+
+def init(dev_id=0, backend='tf', num_gpu=0, gpuq=[0], gpu_mem=None, num_process=1, use_omp=False, verbose=False):
 	global NUM_PROCESS, PHSCL_DEV_ID, DEVICE_ID, DEV, DEV_IDQ, DEVICE_INIT
 	if (DEVICE_INIT): return
 	NUM_PROCESS, PHSCL_DEV_ID, DEVICE_ID = num_process, gpuq[dev_id], dev_id
@@ -340,8 +340,8 @@ def init(dev_id=0, backend='th', num_gpu=0, gpuq=[0], gpu_mem=None, num_process=
 	from keras import backend as K
 	reload(K)
 	DEVICE_INIT = True
-	
-	
+
+
 def get_activations(model, X, layer_name=None):
 	import keras.backend as K
 	output_layer = model.get_layer(layer_name) if layer_name else model.layers[-1]
@@ -349,7 +349,7 @@ def get_activations(model, X, layer_name=None):
 	activations = get_activations_func([X[0],0])
 	return activations
 
-	
+
 def get_dummy(**kwargs):
 	from keras.engine.topology import InputSpec, Layer
 	import keras.backend as K
@@ -375,34 +375,36 @@ def gen_mdl(input_dim, output_dim, model, mdl_type='clf', backend='th', session=
 		init(backend=backend)
 	device = DEV
 	# Each model keeps one session, create a new one or reuse the previous one
-	if (session is None and backend == 'tf'):
-		import keras.backend.tensorflow_backend as K
-		with gen_cntxt(backend, device):
-			if (device.lower().startswith('/gpu')):
-				config = K.tf.ConfigProto(allow_soft_placement=True, log_device_placement=verbose)
-				config.gpu_options.visible_device_list = DEV_IDQ
-				config.gpu_options.per_process_gpu_memory_fraction=DEVICE_VARS['gpu_mem']
-				config.gpu_options.allow_growth=True
-			else:
-				config = K.tf.ConfigProto(device_count={'gpu':0, 'cpu': 1}, allow_soft_placement=True, inter_op_parallelism_threads=NUM_PROCESS, intra_op_parallelism_threads=NUM_PROCESS, log_device_placement=verbose)
-			# if DEVICE_VARS.has_key('sess'):
-				# DEVICE_VARS['sess'].close()
-				# del DEVICE_VARS['sess']
-			from numba import cuda
-			try:
-				cuda.get_current_device().reset()
-			except Exception as e:
-				print e
-			K.clear_session()
-			while True:
+	if (backend == 'tf'):
+		if (session is None):
+			import keras.backend.tensorflow_backend as K
+			with gen_cntxt(backend, device):
+				if (device.lower().startswith('/gpu')):
+					config = K.tf.ConfigProto(allow_soft_placement=True, log_device_placement=verbose)
+					config.gpu_options.visible_device_list = DEV_IDQ
+					config.gpu_options.per_process_gpu_memory_fraction=DEVICE_VARS['gpu_mem']
+					config.gpu_options.allow_growth=True
+				else:
+					config = K.tf.ConfigProto(device_count={'gpu':0, 'cpu': 1}, allow_soft_placement=True, inter_op_parallelism_threads=NUM_PROCESS, intra_op_parallelism_threads=NUM_PROCESS, log_device_placement=verbose)
+				# if DEVICE_VARS.has_key('sess'):
+					# DEVICE_VARS['sess'].close()
+					# del DEVICE_VARS['sess']
+				from numba import cuda
 				try:
-					session = K.tf.Session(config=config)
-					break
+					cuda.get_current_device().reset()
 				except Exception as e:
 					print e
-					time.sleep(5)
-			# session = DEVICE_VARS.setdefault('sess', K.tf.Session(config=config))
-	K.set_session(session)
+				K.clear_session()
+				while True:
+					try:
+						session = K.tf.Session(config=config)
+						break
+					except Exception as e:
+						print e
+						time.sleep(5)
+				# session = DEVICE_VARS.setdefault('sess', K.tf.Session(config=config))
+		else:
+			K.set_session(session)
 	if (udargs):
 		kwargs.update({k:v for k, v in [(x, locals()[x]) for x in udargs]})
 	if (mdl_type == 'clf'):
@@ -410,11 +412,11 @@ def gen_mdl(input_dim, output_dim, model, mdl_type='clf', backend='th', session=
 	elif (mdl_type == 'mlclf'):
 		return MLClassifier(build_fn=model, context=dict(backend=backend, device=device, session=session), verbose=verbose, **kwargs)
 	elif (mdl_type == 'signedclf'):
-		return SignedClassifier(build_fn=model, context=dict(backend=backend, device=device, session=session), verbose=verbose, **kwargs) 
+		return SignedClassifier(build_fn=model, context=dict(backend=backend, device=device, session=session), verbose=verbose, **kwargs)
 	elif (mdl_type == 'clt'):
 		return KerasCluster(build_fn=model, verbose=verbose, **kwargs)
-		
-		
+
+
 def gen_cltmdl(proba_thrsh=0.5, context=None, session=None, **kwargs):
 	'''
 	Factory method for Clustering Model
@@ -444,8 +446,8 @@ def gen_cltmdl(proba_thrsh=0.5, context=None, session=None, **kwargs):
 				del self.session
 			super(CLTModel, self).__del__()
 	return CLTModel(context=context, session=session, **kw_args)
-	
-	
+
+
 def gen_cntxt(backend='th', device=DEV, session=None):
 	'''
 	Factory method for Keras context object
@@ -471,9 +473,9 @@ def gen_cntxt(backend='th', device=DEV, session=None):
 		return KerasContext(backend, device, session).cntxt
 	else:
 		return KerasContext(backend, device, session)
-		
 
-## Custom Metrics		
+
+## Custom Metrics
 def precision(y_true, y_pred):
 	"""Precision metric.
 
