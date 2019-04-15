@@ -14,7 +14,6 @@ import sys
 import yaml
 import json
 import time
-import fcntl
 import errno
 import cStringIO
 import cPickle as pickle
@@ -256,6 +255,10 @@ def cfg_reader(fpath):
 	
 	
 def lockf(flpath, wait_time=1):
+	if sys.platform.startswith('linux2'):
+		import fcntl
+	else:
+		return
 	x = flpath if type(flpath) is file else open(flpath, 'w+')
 	while True:
 		try:
@@ -269,6 +272,10 @@ def lockf(flpath, wait_time=1):
 	return x
 				
 def unlockf(flpath):
+	if sys.platform.startswith('linux2'):
+		import fcntl
+	else:
+		return
 	x = flpath if type(flpath) is file else open(flpath, 'w+')
 	fcntl.flock(x, fcntl.LOCK_UN)
 	x.close()
