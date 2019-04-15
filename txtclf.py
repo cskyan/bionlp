@@ -23,7 +23,6 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, KFold, GridSearchCV, RandomizedSearchCV
 from sklearn import metrics
-from keras.utils.io_utils import HDF5Matrix
 
 from util import io, func, plot
 import util.math as imath
@@ -38,7 +37,7 @@ def init(plot_cfg={}, plot_common={}):
 	if (len(plot_common) > 0):
 		common_cfg = plot_common
 
-		
+
 def get_featw(pipeline, feat_num):
 	feat_w_dict, sub_feat_w = [{} for i in range(2)]
 	filt_feat_idx = feature_idx = np.arange(feat_num)
@@ -109,11 +108,12 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 
 	t0 = time()
 	orig_pred = pred = pipeline.predict(X_test)
+	orig_prob = prob = pipeline.predict_proba(X_test)
 	test_time = time() - t0
 	print '+' * 80
 	print 'Testing: '
 	print 'test time: %0.3fs' % test_time
-	
+
 	is_mltl = mltl
 	if (signed):
 		Y_test = np.column_stack([np.abs(Y_test).reshape((Y_test.shape[0],-1))] + [label_binarize(lb, classes=[-1,1,0])[:,1] for lb in (np.sign(Y_test).astype('int8').reshape((Y_test.shape[0],-1))).T]) if (len(Y_test.shape) < 2 or Y_test.shape[1] == 1 or np.where(Y_test<0)[0].shape[0]>0) else Y_test
@@ -173,7 +173,7 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 
 	if (signed and (len(scores.shape) < 2 or scores.shape[1] < pred.shape[1])):
 		scores = np.concatenate([np.abs(scores).reshape((scores.shape[0],-1))] + [label_binarize(lb, classes=[-1,1,0])[:,:2] for lb in (np.sign(scores).astype('int8').reshape((scores.shape[0],-1))).T], axis=1)
-		
+
 	if (is_mltl):
 		if ((len(Y_test.shape) == 1 or Y_test.shape[1] == 1) and len(np.unique(Y_test)) > 2):
 			lbz = LabelBinarizer()
@@ -263,7 +263,7 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 	if (is_mltl and average == 'all'):
 		return {'accuracy':accuracy, 'micro-precision':micro_precision, 'micro-recall':micro_recall, 'micro-fscore':micro_fscore, 'macro-precision':macro_precision, 'macro-recall':macro_recall, 'macro-fscore':macro_fscore, 'train_time':train_time, 'test_time':test_time, 'micro-roc':micro_roc, 'macro-roc':macro_roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred}
 	else:
-		return {'accuracy':accuracy, 'precision':precision, 'recall':recall, 'fscore':fscore, 'train_time':train_time, 'test_time':test_time, 'roc':roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred}
+		return {'accuracy':accuracy, 'precision':precision, 'recall':recall, 'fscore':fscore, 'train_time':train_time, 'test_time':test_time, 'roc':roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred, 'pred_prob':orig_prob}
 
 
 # Calculate the venn digram overlaps
@@ -275,7 +275,7 @@ def pred_ovl(preds, pred_true=None, axis=1):
 	# Row represents feature, column represents instance
 	var_num, dim = preds.shape[0], preds.shape[1]
 	orig_idx = np.arange(var_num)
-	
+
 	if (len(preds.shape) < 2 or preds.shape[1] == 1):
 		if (pred_true is None):
 			return np.ones(shape=(1,), dtype='int')
@@ -305,8 +305,8 @@ def pred_ovl(preds, pred_true=None, axis=1):
 			overlap_mt[i,0] = orig_idx[condition].shape[0]
 			overlap_mt[i,1] = orig_idx[true_cond].shape[0]
 	return overlap_mt
-	
-	
+
+
 def save_featw(features, crsval_featw, crsval_subfeatw, cfg_param={}, lbid=''):
 	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
 	for k, v in crsval_featw.iteritems():
@@ -342,15 +342,15 @@ def save_featw(features, crsval_featw, crsval_subfeatw, cfg_param={}, lbid=''):
 			io.write_df(subfeat_w_df, 'subfeatw%s_%s' % (lbidstr, measure_str), with_idx=True)
 		if (cfg_param.setdefault('plot_subfeatw', False)):
 			plot.plot_bar(subfeat_w_avg[sorted_idx[:10]].reshape((1,-1)), subfeat_w_std[sorted_idx[:10]].reshape((1,-1)), features[sorted_idx[:10]], labels=None, title='Feature importances', fname='fig_subfeatw_%s' % measure_str, plot_cfg=common_cfg)
-	
-	
+
+
 # Classification
 def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_param={}, global_param={}, lbid=''):
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
 	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
 	to_hdf, hdf5_fpath = cfg_param.setdefault('to_hdf', False), '%s' % 'crsval_dataset.h5' if cfg_param.setdefault('hdf5_fpath', 'crsval_dataset.h5') is None else cfg_param['hdf5_fpath']
-	
+
 	# Format the data
 	if (type(X_train) == list):
 		assert all([len(x) == len(X_train[0]) for x in X_train[1:]])
@@ -414,7 +414,7 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 		preds.append(pred)
 		probs.append(prob)
 		scores.append(get_score(pipeline, X_test, mltl))
-		
+
 		# Save predictions and model
 		if (cfg_param.setdefault('save_pred', True)):
 			io.write_npz(dict(pred_lb=pred, pred_prob=prob), 'clf_pred_%s%s' % (model_name.replace(' ', '_').lower(), lbidstr))
@@ -436,35 +436,36 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 			crsval_subfeatw.setdefault(key, []).append(v)
 		print '\n'
 
-	# Prediction overlap
-	preds_mt = np.column_stack([x.ravel() for x in preds])
-	povl = np.array(pred_ovl(preds_mt))
-	# Spearman's rank correlation
-	spmnr, spmnr_pval = stats.spearmanr(preds_mt)
-	# Kendall rank correlation
-#	kendalltau = stats.kendalltau(preds_mt)[0]
-	# Pearson correlation
-#	pearson = tats.pearsonr(preds_mt)[0]
+	if (len(preds) > 1):
+		# Prediction overlap
+		preds_mt = np.column_stack([x.ravel() for x in preds])
+		povl = np.array(pred_ovl(preds_mt))
+		# Spearman's rank correlation
+		spmnr, spmnr_pval = stats.spearmanr(preds_mt)
+		# Kendall rank correlation
+	#	kendalltau = stats.kendalltau(preds_mt)[0]
+		# Pearson correlation
+	#	pearson = tats.pearsonr(preds_mt)[0]
 
-	## Save performance data
-	povl_idx = [' & '.join(x) for x in imath.subset(PL_NAMES, min_crdnl=1)]
-	povl_df = pd.DataFrame(povl, index=povl_idx, columns=['pred_ovl'])
-	spmnr_df = pd.DataFrame(spmnr, index=PL_NAMES, columns=PL_NAMES)
-	spmnr_pval_df = pd.DataFrame(spmnr_pval, index=PL_NAMES, columns=PL_NAMES)
-	if (cfg_param.setdefault('save_povl', False)):
-		povl_df.to_excel('cpovl_clf%s.xlsx' % lbidstr)
-	if (cfg_param.setdefault('save_povl_npz', False)):
-		io.write_df(povl_df, 'povl_clf%s.npz' % lbidstr, with_idx=True)
-	if (cfg_param.setdefault('save_spmnr', False)):
-		spmnr_df.to_excel('spmnr_clf%s.xlsx' % lbidstr)
-	if (cfg_param.setdefault('save_spmnr_npz', False)):
-		io.write_df(spmnr_df, 'spmnr_clf%s.npz' % lbidstr, with_idx=True)
-	if (cfg_param.setdefault('save_spmnr_pval', False)):
-		spmnr_pval_df.to_excel('spmnr_pval_clf%s.xlsx' % lbidstr)
-	if (cfg_param.setdefault('save_spmnr_pval_npz', False)):
-		io.write_df(spmnr_pval_df, 'spmnr_pval_clf%s.npz' % lbidstr, with_idx=True)
+		## Save performance data
+		povl_idx = [' & '.join(x) for x in imath.subset(PL_NAMES, min_crdnl=1)]
+		povl_df = pd.DataFrame(povl, index=povl_idx, columns=['pred_ovl'])
+		spmnr_df = pd.DataFrame(spmnr, index=PL_NAMES, columns=PL_NAMES)
+		spmnr_pval_df = pd.DataFrame(spmnr_pval, index=PL_NAMES, columns=PL_NAMES)
+		if (cfg_param.setdefault('save_povl', False)):
+			povl_df.to_excel('cpovl_clf%s.xlsx' % lbidstr)
+		if (cfg_param.setdefault('save_povl_npz', False)):
+			io.write_df(povl_df, 'povl_clf%s.npz' % lbidstr, with_idx=True)
+		if (cfg_param.setdefault('save_spmnr', False)):
+			spmnr_df.to_excel('spmnr_clf%s.xlsx' % lbidstr)
+		if (cfg_param.setdefault('save_spmnr_npz', False)):
+			io.write_df(spmnr_df, 'spmnr_clf%s.npz' % lbidstr, with_idx=True)
+		if (cfg_param.setdefault('save_spmnr_pval', False)):
+			spmnr_pval_df.to_excel('spmnr_pval_clf%s.xlsx' % lbidstr)
+		if (cfg_param.setdefault('save_spmnr_pval_npz', False)):
+			io.write_df(spmnr_pval_df, 'spmnr_pval_clf%s.npz' % lbidstr, with_idx=True)
 	save_featw(X_train[0].columns.values if (type(X_train) is list) else X_train.columns.values, crsval_featw, crsval_subfeatw, cfg_param=cfg_param, lbid=lbid)
-	
+
 	return preds, scores
 
 
@@ -513,14 +514,15 @@ def kf2data(kf, X, Y, to_hdf=False, hdf5_fpath='crsval_dataset.h5'):
 				HDF5Matrix.refs.pop(hfpath, None)
 		else:
 			yield i, [x.as_matrix() for x in X_train] if (type(X_train) == list) else X_train.as_matrix(), [x.as_matrix() for x in X_test] if (type(X_test) == list) else X_test.as_matrix(), Y_train, Y_test, train_idx_df, test_idx_df
-			
-			
+
+
 # Evaluation
 def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='micro', kfold=5, cfg_param={}, global_param={}, lbid=''):
+	from keras.utils.io_utils import HDF5Matrix
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
 	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
-	
+
 	# Format the data
 	if (type(X_train) == list):
 		assert all([len(x) == len(X_train[0]) for x in X_train[1:]])
@@ -536,7 +538,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 		Y_train = Y_train.as_matrix().reshape((Y_train.shape[0],)) if (len(Y_train.shape) == 1 or Y_train.shape[1] == 1) else Y_train.as_matrix()
 	else:
 		Y_train = Y_train
-		
+
 	if (type(X_test) == list):
 		assert all([len(x) == len(X_test[0]) for x in X_test[1:]])
 		X_test = [pd.DataFrame(x) if (type(x) != pd.io.parsers.TextFileReader and type(x) != pd.DataFrame) else x for x in X_test]
@@ -553,7 +555,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 		Y_test = Y_test
 
 	is_mltl = True if len(Y_train.shape) > 1 and Y_train.shape[1] > 1 or 2 in Y_train else False
-		
+
 	print 'Benchmark is starting...'
 	mean_fpr = np.linspace(0, 1, 100)
 	mean_recall = np.linspace(0, 1, 100)
@@ -614,7 +616,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 			results.append([bm_results[x] for x in ['accuracy', 'precision', 'recall', 'fscore', 'train_time', 'test_time']])
 		preds.append(bm_results['pred_lb'])
 		if (cfg_param.setdefault('save_pred', False)):
-			io.write_npz(dict(pred_lb=bm_results['pred_lb'], true_lb=Y_test), 'pred_%s%s' % (model_name.replace(' ', '_').lower(), lbidstr))
+			io.write_npz(dict(pred_lb=bm_results['pred_lb'], pred_prob=bm_results['pred_prob'], true_lb=Y_test), 'pred_%s%s' % (model_name.replace(' ', '_').lower(), lbidstr))
 		if (is_mltl and avg == 'all'):
 			micro_id, macro_id = '-'.join([model_name,'micro']), '-'.join([model_name,'macro'])
 			roc_dict[micro_id] = roc_dict.setdefault(micro_id, 0) + np.interp(mean_fpr, bm_results['micro-roc'][0], bm_results['micro-roc'][1])
@@ -644,7 +646,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 	# kendalltau = stats.kendalltau(preds_mt)
 	# Pearson correlation
 	# pearson = stats.pearsonr(preds_mt)
-	
+
 	## Save performance data
 	if (is_mltl and avg == 'all'):
 		metric_idx = ['Accuracy', 'Micro Precision', 'Micro Recall', 'Micro F score', 'Macro Precision', 'Macro Recall', 'Macro F score', 'Train time', 'Test time']
@@ -678,7 +680,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 		save_featw(xdf.columns.values if type(xdf) != HDF5Matrix else np.arange(xdf.shape[1]), featw_data, subfeatw_data, cfg_param=cfg_param, lbid=lbid)
 	except Exception as e:
 		print e
-		
+
 	## Plot figures
 	if (is_mltl and avg == 'all'):
 		micro_roc_data, micro_roc_labels, micro_roc_aucs, macro_roc_data, macro_roc_labels, macro_roc_aucs = [[] for i in range(6)]
@@ -747,14 +749,15 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 				mtrc_std = np.concatenate(mtrc_std_list)
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=CLF_NAMES, labels=FILT_NAMES, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clf_ft%s' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)
 
-	
+
 # Cross validation
 def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_param={}, split_param={}, global_param={}, lbid=''):
+	from keras.utils.io_utils import HDF5Matrix
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
 	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
 	to_hdf, hdf5_fpath = cfg_param.setdefault('to_hdf', False), 'crsval_dataset%s.h5' % lbidstr if cfg_param.setdefault('hdf5_fpath', 'crsval_dataset%s.h5' % lbidstr) is None else cfg_param['hdf5_fpath']
-	
+
 	# Format the data
 	if (type(X) == list):
 		assert all([len(x) == len(X[0]) for x in X[1:]])
@@ -771,7 +774,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	else:
 		Y_mt = Y
 	is_mltl = True if len(Y_mt.shape) > 1 and Y_mt.shape[1] > 1 or 2 in Y_mt else False
-		
+
 	print 'Benchmark is starting...'
 	mean_fpr = np.linspace(0, 1, 100)
 	mean_recall = np.linspace(0, 1, 100)
@@ -878,7 +881,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 		# Spearman's rank correlation
 		crsval_spearman.append(stats.spearmanr(tpreds_mt))
 		# Kendall rank correlation
-		# crsval_kendalltau.append(stats.kendalltau(preds_mt)) 
+		# crsval_kendalltau.append(stats.kendalltau(preds_mt))
 		# Pearson correlation
 		# crsval_pearson.append(stats.pearsonr(preds_mt))
 		del X_train, X_test, Y_train, Y_test
@@ -892,7 +895,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	# kndtr_pval = np.array([crkdt[1] for crkdt in crsval_kendalltau]).mean(axis=0)
 	# prsnr_avg = np.array([crprs[0] for crprs in crsval_pearson).mean(axis=0)
 	# prsnr_pval = np.array([crprs[1] for crprs in crsval_pearson]).mean(axis=0)
-	
+
 	## Save performance data
 	if (is_mltl and avg == 'all'):
 		metric_idx = ['Accuracy', 'Micro Precision', 'Micro Recall', 'Micro F score', 'Macro Precision', 'Macro Recall', 'Macro F score', 'Train time', 'Test time']
@@ -931,7 +934,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 		save_featw(xdf.columns.values if type(xdf) != HDF5Matrix else np.arange(xdf.shape[1]), crsval_featw, crsval_subfeatw, cfg_param=cfg_param, lbid=lbid)
 	except Exception as e:
 		print e
-	
+
 	## Plot figures
 	if (is_mltl and avg == 'all'):
 		micro_roc_data, micro_roc_labels, micro_roc_aucs, macro_roc_data, macro_roc_labels, macro_roc_aucs = [[] for i in range(6)]
@@ -1002,8 +1005,8 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 				mtrc_avg = np.concatenate(mtrc_avg_list)
 				mtrc_std = np.concatenate(mtrc_std_list)
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=CLF_NAMES, labels=FILT_NAMES, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clf_ft%s' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)
-				
-				
+
+
 def tune_param(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_jobs=-1):
 	if (rdtune):
 		param_dist, n_iter = [params[k] for k in ['param_dist', 'n_iter']]
@@ -1041,14 +1044,14 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_j
 		score_std_cube[tuple(idx)] = score_std_list[i]
 	return grid.best_params_, grid.best_score_, score_avg_cube, score_std_cube, dim_names, dim_vals
 
-	
-def tune_param_optunity(mdl_name, mdl, X, Y, scoring='f1', optfunc='max', solver='particle swarm', params={}, mltl=False, avg='micro', n_jobs=-1):
+
+def tune_param_optunity(mdl_name, mdl, X, Y, perf_func=None, scoring='f1', optfunc='max', solver='particle swarm', params={}, mltl=False, avg='micro', n_jobs=-1):
 	import optunity
 	struct, param_space, folds, n_iter = [params.setdefault(k, None) for k in ['struct', 'param_space', 'folds', 'n_iter']]
 	ext_params = dict.fromkeys(param_space.keys()) if (not struct) else dict.fromkeys(params.setdefault('param_names', []))
 	kwargs = dict([('num_iter', n_iter), ('num_folds', folds)]) if (type(folds) is int) else dict([('num_iter', n_iter), ('num_folds', folds.get_n_splits()), ('folds', [list(folds.split(X))] * n_iter)])
 	@optunity.cross_validated(x=X, y=Y, **kwargs)
-	def perf(x_train, y_train, x_test, y_test, **ext_params):
+	def default_perf(x_train, y_train, x_test, y_test, **ext_params):
 		mdl.fit(x_train, y_train)
 		if (scoring == 'roc'):
 			preds = get_score(mdl, x_test, mltl)
@@ -1063,6 +1066,7 @@ def tune_param_optunity(mdl_name, mdl, X, Y, scoring='f1', optfunc='max', solver
 			print 'Score function %s is not supported!' % scoring
 			sys.exit(1)
 		return score_func(y_test, preds, average=avg)
+	perf = perf_func if callable(perf_func) else default_perf
 	if (optfunc == 'max'):
 		config, info, _ = optunity.maximize(perf, num_evals=n_iter, solver_name=solver, pmap=optunity.parallel.create_pmap(n_jobs), **param_space) if (not struct) else optunity.maximize_structured(perf, search_space=param_space, num_evals=n_iter, pmap=optunity.parallel.create_pmap(n_jobs))
 	elif (optfunc == 'min'):
@@ -1092,11 +1096,67 @@ def tune_param_optunity(mdl_name, mdl, X, Y, scoring='f1', optfunc='max', solver
 		score_avg_cube[tuple(idx)] = score_avg_list[i]
 		score_std_cube[tuple(idx)] = score_std_list[i]
 	return config, info.optimum, score_avg_cube, score_std_cube, dim_names, dim_vals
-	
-	
+
+
+def tune_param_hyperopt(mdl_name, mdl, X, Y, obj_func=None, scoring='f1', solver=None, params={}, mltl=False, avg='micro', n_jobs=-1):
+	import hyperopt
+	param_space, trials, folds, max_evals = [params.setdefault(k, v) for k, v in zip(['param_space', 'trials', 'folds', 'n_iter'], [{}, hyperopt.Trials(), 5, 500])]
+	ext_params = dict.fromkeys(param_space.keys())
+	num_folds = folds if (type(folds) is int) else folds.get_n_splits()
+	def default_obj(parameters):
+		from sklearn.model_selection import cross_validate as cv
+		cv_results = cv(mdl, X, Y, scoring=scoring, cv=num_folds, return_train_score=False)
+		return {'loss': 1-cv_results['test_score'].mean(), 'params': parameters, 'status': hyperopt.STATUS_OK}
+	objective = obj_func if callable(obj_func) else default_obj
+	best_config = hyperopt.fmin(fn=objective, space=param_space, algo=solver if solver else hyperopt.tpe.suggest, max_evals=max_evals, trials=trials)
+	best_trials = sorted(trials.results, key=lambda x: x['loss'], reverse=False)
+	best_score = 1 - best_trials[0]['loss']
+	print("The best parameters of [%s] are %s, with a score of %0.3f" % (mdl_name, best_config, best_score))
+	params, losses = zip(*[(x['params'], x['loss']) for x in best_trials])
+	tune_df = pd.concat([pd.DataFrame(params), 1-pd.DataFrame(losses, columns=['value'])], axis=1)
+	# Store all the parameter candidates into a dictionary of list
+	param_grid = dict([(x, sorted(set(tune_df[x]))) for x in tune_df.columns if x != 'value'])
+	param_names = param_grid.keys()
+	# Index the parameter names and valules
+	dim_names = dict([(k, i) for i, k in enumerate(param_names)])
+	dim_vals = {}
+	for pn in dim_names.keys():
+	  dim_vals[pn] = dict([(k, i) for i, k in enumerate(param_grid[pn])])
+	# Create data cube
+	score_avg_cube = np.ndarray(shape=[len(param_grid[k]) for k in param_names], dtype='float') * np.nan
+	score_std_cube = np.ndarray(shape=[len(param_grid[k]) for k in param_names], dtype='float') * np.nan
+	# Calculate the score list
+	score_avg_list = tune_df['value']
+	score_std_list = np.zeros_like(tune_df['value'])
+	# Fill in the data cube
+	for i, p_option in tune_df[param_names].iterrows():
+	  idx = np.zeros((len(dim_names),), dtype='int')
+	  for k, v in p_option.iteritems():
+	    idx[dim_names[k]] = dim_vals[k][v]
+	  score_avg_cube[tuple(idx)] = score_avg_list[i]
+	  score_std_cube[tuple(idx)] = score_std_list[i]
+	return best_config, best_score, score_avg_cube, score_std_cube, dim_names, dim_vals
+
+
 def analyze_param(param_name, score_avg, score_std, dim_names, dim_vals, best_params):
     best_param_idx = dict([(k, (dim_names[k], dim_vals[k][best_params[k]])) for k in dim_names.keys()])
     best_param_idx[param_name] = (best_param_idx[param_name][0], slice(0, score_avg.shape[dim_names[param_name]]))
     _, slicing = zip(*func.sorted_tuples(best_param_idx.values(), key_idx=0))
     param_vals, _ = zip(*func.sorted_dict(dim_vals[param_name], key='value'))
     return np.array(param_vals), score_avg[slicing], score_std[slicing]
+
+
+def test_tune():
+	from sklearn.datasets import make_classification
+	from sklearn import svm
+	from hyperopt import hp
+	X, Y = make_classification()
+	clf = svm.SVC(gamma=0.001, C=100.)
+	tune_param_hyperopt('SVM', clf, X, Y, params={'n_iter':10, 'param_space':{'gamma':hp.loguniform('gamma', np.log(0.01), np.log(0.2)), 'C':hp.quniform('C', 100, 150, 1)}})
+
+
+def test():
+	test_tune()
+
+if __name__ == '__main__':
+    test()
