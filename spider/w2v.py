@@ -36,7 +36,10 @@ class GensimW2VWrapper(object):
 		except Exception as e:
 			print e
 			self.model = KeyedVectors.load_word2vec_format(self.model_path, binary=True)
-		
+			mdl_path = '%s_r.bin' % os.path.splitext(self.model_path)[0]
+			print 'Resaving the model to %s in Gensim format...' % mdl_path
+			self.model.save(mdl_path)
+
 	def get_vocab(self):
 		word2idx = dict([(k, v.index) for k, v in self.model.vocab.items()])
 		idx2word = dict([(v, k) for k, v in word2idx.items()])
@@ -59,7 +62,7 @@ class GensimW2VWrapper(object):
 
 	def get_dim(self):
 		return self.model.syn0.shape[1]
-		
+
 	def get_embedding_layer(self, type='keras', **kwargs):
 		weights = self.get_weights()
 		if (type == 'keras'):
@@ -67,7 +70,7 @@ class GensimW2VWrapper(object):
 			from keras.initializers import Constant
 			return Embedding(input_dim=weights.shape[0], output_dim=weights.shape[1], weights=[weights], **kwargs)
 			# return Embedding(input_dim=weights.shape[0], output_dim=weights.shape[1], embeddings_initializer=Constant(value=weights), **kwargs)
-			
+
 	def get_text_stream(text, input_mode='sentence', output_mode='sentence', to_idx=True, batch_size=1000, n_jobs=1):
 		import spacy
 		spacy_nlp = spacy.load('en')
@@ -177,7 +180,7 @@ def _target(endpoint='', timeout=10, query='*:*', start=0, **kw_args):
 		raise RuntimeError('Cannot connect to the Solr service!')
 	return res
 
-				
+
 def _spacy_tokenizer(field, batch_size=1000, n_jobs=-1):
 	import spacy
 	spacy_nlp = spacy.load('en')
