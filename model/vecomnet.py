@@ -58,12 +58,12 @@ def _vecomnet_loss(Y_true, Y_pred, weights=None):
 		weights = K.constant(np.clip(weights, 0.0, 1.0))
 		out = - (weights * event_true * K.log(event) + (1 - weights) * (1.0 - event_true) * K.log(1.0 - event)) - (direction_true * K.log(direction) + (1.0 - direction_true) * K.log(1.0 - direction))
 	return K.mean(out, axis=-1)
-	
-	
-CUSTOM_LOSS = {'_vecomnet_loss':_vecomnet_loss, 'w_binary_crossentropy':w_binary_crossentropy}
-	
 
-def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=None, backend='tf', device='', session=None, cross_device=True, mltl_accc=False, lstm_dim=128, lstm_num=2, ent_mlp_dim=128, evnt_mlp_dim=64, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None, precomp_vec=None):
+
+CUSTOM_LOSS = {'_vecomnet_loss':_vecomnet_loss, 'w_binary_crossentropy':w_binary_crossentropy}
+
+
+def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=None, backend='tf', device='', session=None, cross_device=True, mltl_accc=False, lstm_dim=128, lstm_num=2, ent_mlp_dim=128, evnt_mlp_dim=64, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None, precomp_vec=None, avgembd_idx=None):
 	main_cntxt = dict(device='/cpu:0') if cross_device else dict(device=device, session=session)
 	with kerasext.gen_cntxt(backend, **main_cntxt):
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(4)]
@@ -84,6 +84,10 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=No
 					dummy_tensor = [fill(2, 0, cw2v_dim - w2v_dim)(crop(2, 0, 1)(x)) for x in word_embeddings]
 					word_embeddings = [Concatenate(axis=2)([wmbd, dummy]) for wmbd, dummy in zip(word_embeddings, dummy_tensor)]
 				embeddings = [Concatenate(axis=1, name='FusionEmbedding%i'%i)([wmbd, cmbd]) for i, (wmbd, cmbd) in enumerate(zip(word_embeddings, cncpt_embeddings))]
+			elif (avgembd_idx is not None):
+				embeddings = [embd_layer(x) for i, x in enumerate(X_inputs)]
+				wembeds, cembeds = zip(*[(crop(1, 0, avgembd_idx[0])(x), crop(1, avgembd_idx[0], avgembd_idx[1]))(x) for x in embeddings])
+				embeddings = [Concatenate(axis=1)([wmbd, cmbd]) for wmbd, cmbd in zip(wembeds, [mask_avg(1, keep_dim=True)(cmbd) for cmbd in cembeds])]
 			else:
 				embeddings = [embd_layer(x) for i, x in enumerate(X_inputs)]
 			with kerasext.gen_cntxt(backend, device, session=session):
@@ -145,9 +149,9 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=No
 			optmzr = TFOptimizer(tf.train.GradientDescentOptimizer(learning_rate=0.1))
 		model.compile(optimizer=optmzr, loss='binary_crossentropy', metrics=['acc', 'mse'], **kwargs)
 	return model
-	
-	
-def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=None, backend='tf', device='', session=None, cross_device=True, mltl_accc=False, conv_dim=128, conv_ksize=4, maxp_size=2, lstm_dim=128, lstm_num=2, mlp_dim=128, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None):
+
+
+def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=None, backend='tf', device='', session=None, cross_device=True, mltl_accc=False, conv_dim=128, conv_ksize=4, maxp_size=2, lstm_dim=128, lstm_num=2, mlp_dim=128, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None, avgembd_idx=None):
 	if (pretrain_vecmdl is not None): return pretrain_vecmdl
 	main_cntxt = dict(device='/cpu:0') if cross_device else dict(device=device, session=session)
 	with kerasext.gen_cntxt(backend, **main_cntxt):
@@ -167,6 +171,11 @@ def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=N
 				dummy_tensor = [fill(2, 0, cw2v_dim - w2v_dim)(crop(2, 0, 1)(x)) for x in word_embeddings]
 				word_embeddings = [Concatenate(axis=2)([wmbd, dummy]) for wmbd, dummy in zip(word_embeddings, dummy_tensor)]
 			embeddings = [Concatenate(axis=1, name='FusionEmbedding%i'%i)([wmbd, cmbd]) for i, (wmbd, cmbd) in enumerate(zip(word_embeddings, cncpt_embeddings))]
+		elif (avgembd_idx is not None):
+			print('Averaging the concept embedding...')
+			embeddings = [embd_layer(x) for i, x in enumerate(X_inputs)]
+			wembeds, cembeds = zip(*[(crop(1, 0, avgembd_idx[0])(x), crop(1, avgembd_idx[0], avgembd_idx[1])(x)) for x in embeddings])
+			embeddings = [Concatenate(axis=1)([wmbd, cmbd]) for wmbd, cmbd in zip(wembeds, [mask_avg(1, keep_dim=True)(cmbd) for cmbd in cembeds])]
 		else:
 			embeddings = [embd_layer(x) for i, x in enumerate(X_inputs)]
 	with kerasext.gen_cntxt(backend, device, session=session):
@@ -202,8 +211,8 @@ def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=N
 			optmzr = TFOptimizer(tf.train.GradientDescentOptimizer(learning_rate=0.1))
 		model.compile(optimizer=optmzr, loss=loss, metrics=['acc', 'mse'], **kwargs)
 	return model
-	
-	
+
+
 def mlmt_vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backend='th', device='', session=None, conv_dim=128, conv_ksize=4, maxp_size=2, lstm_dim=128, lstm_num=2, mlp_dim=128, drop_ratio=0.2, class_weight=None):
 	with kerasext.gen_cntxt(backend, device):
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(2)]
@@ -230,7 +239,8 @@ def mlmt_vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', backen
 		predict_model = Model(X_inputs, output)
 		plot_model(predict_model, show_shapes=True, to_file='model.png')
 	return train_models, predict_model
-	
+
+
 def crop(axis, start, end):
 	def func(x):
 		if axis == 0:
@@ -244,9 +254,16 @@ def crop(axis, start, end):
 		if axis == 4:
 			return x[:,:,:,:,start:end]
 	return Lambda(func)
-	
-	
+
+
 def fill(axis, val=0, rep=1, expand_dims=False):
 	def func(x):
 		return K.repeat_elements(val * K.ones_like(K.expand_dims(x, axis=axis)), rep=rep, axis=axis) if expand_dims else K.repeat_elements(val * K.ones_like(x), rep=rep, axis=axis)
+	return Lambda(func)
+
+
+def mask_avg(axis, keep_dim=False):
+	def func(x):
+		reduced_sum = K.sum(x, axis=axis) / K.sum(K.cast(K.not_equal(x, 0), 'float32'), axis=axis)
+		return K.expand_dims(reduced_sum, axis=axis) if keep_dim else reduced_sum
 	return Lambda(func)

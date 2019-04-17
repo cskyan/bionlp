@@ -25,8 +25,8 @@ from util import io
 
 def get_nltk_words():
 	return nltk.corpus.words.words()
-	
-	
+
+
 def clean_txt(text):
 	return text.encode('ascii', 'ignore').decode('ascii').replace('\\', '')
 
@@ -40,7 +40,7 @@ def clean_text(text, encoding='ascii', replacement=' '):
 	else:
 		return unicodedata.normalize('NFC', text.decode('utf-8', errors='replace')).encode(encoding, errors='replace').replace('?', replacement)
 
-	
+
 def find_location(text, tokens):
 	offset, location = 0, []
 	for t in tokens:
@@ -51,8 +51,8 @@ def find_location(text, tokens):
 			offset = new_offset
 			location.append((offset, offset + len(t)))
 	return location
-	
-	
+
+
 def annot_align(annot_locs, token_locs, error=0):
 	token2annot, annot2token = [[] for x in range(len(token_locs))], [[] for x in range(len(annot_locs))]
 	for i in xrange(len(annot_locs)):
@@ -82,8 +82,8 @@ def annot_align(annot_locs, token_locs, error=0):
 	# print '\t'.join(['-'.join([str(l), '<%s>'%a]) for l,a in zip(token_locs, token2annot)])
 	# print '\t'.join(['-'.join([str(l), '<%s>'%a]) for l,a in zip(annot_locs, annot2token)])
 	return annot2token, token2annot
-	
-	
+
+
 def annot_list_align(annots_locs, tokens_locs, error=0):
 	annots_list_idx, tokens_list_idx = sum([[(i, j) for j in range(len(annots_locs[i]))] for i in range(len(annots_locs))], []), sum([[(i, j) for j in range(len(tokens_locs[i]))] for i in range(len(tokens_locs))], [])
 	annot_locs, token_locs = sum(annots_locs, []), sum(tokens_locs, [])
@@ -94,7 +94,7 @@ def annot_list_align(annots_locs, tokens_locs, error=0):
 	for i, t2as in enumerate(token2annot):
 		tokens2annots[tokens_list_idx[i][0]].append([annots_list_idx[t2a] for t2a in t2as])
 	return annots2tokens, tokens2annots
-	
+
 
 def tokenize(text, model='word', ret_loc=False, **kwargs):
 	if (model == 'casual'):
@@ -119,7 +119,7 @@ def tokenize(text, model='word', ret_loc=False, **kwargs):
 		return tokens, find_location(text, tokens)
 	return tokens
 
-	
+
 def span_tokenize(text):
 	from nltk.tokenize import WhitespaceTokenizer
 	return list(WhitespaceTokenizer().span_tokenize(text))
@@ -128,15 +128,15 @@ def span_tokenize(text):
 # def del_punct(tokens, location=None):
 	# if (location is not None):
 		# tkn_locs = [(t, loc) for t, loc in zip(tokens, location) if t not in string.punctuation]
-		# if (len(tkn_locs) == 0): 
+		# if (len(tkn_locs) == 0):
 			# return [], []
 		# else:
 			# return zip(*tkn_locs)
 	# return [t for t in tokens if t not in string.punctuation]
 def del_punct(tokens, ret_idx=False):
 	return zip(*[(t, i) for i, t in enumerate(tokens) if t not in string.punctuation]) if ret_idx else [t for t in tokens if t not in string.punctuation]
-	
-	
+
+
 def lemmatize(tokens, model='wordnet', **kwargs):
 	if (model == 'wordnet'):
 		from nltk.stem import WordNetLemmatizer
@@ -166,8 +166,8 @@ def stem(tokens, model='porter', **kwargs):
 		stemmer = SnowballStemmer(**kwargs)
 	stemmed_tokens = [stemmer.stem(t) for t in tokens]
 	return stemmed_tokens
-	
-	
+
+
 def pos(tokens):
 	from nltk import pos_tag
 	return pos_tag(tokens)
@@ -183,8 +183,8 @@ def corenlp2tree(sentence):
 		if rel == 'root':
 			rel = 'ROOT' # NLTK expects that the root relation is labelled as ROOT!
 		yield int(idx), int(head_idx), rel
-	
-	
+
+
 def dpnd_trnsfm(dict_data, shape, encoding='categorical', **kwargs):
 	from scipy.sparse import coo_matrix
 	idx_list, v_list = zip(*dict_data.items())
@@ -310,14 +310,14 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', dpnd_encoding='cate
 				sddf = pd.DataFrame(sdmt.tocsr().todense())
 			dpnd_dfs.append(sddf)
 		coref = sents.setdefault('coref', [])
-			
+
 	# Write to cache
 	if (cached_id is not None):
 		io.write_obj((tokens, dpnd_dfs, coref), cache_file)
 	return tokens, dpnd_dfs, coref
 
-	
-def parse_all(text, method='spacy', fmt='mt', tree_shape='symm', dpnd_encoding='categorical', dpnd_classmap={}, cached_id=None, cache_path=None, **kwargs):	
+
+def parse_all(text, method='spacy', fmt='mt', tree_shape='symm', dpnd_encoding='categorical', dpnd_classmap={}, cached_id=None, cache_path=None, **kwargs):
 	sf_tokens, sf_dpnd_dfs, sf_coref = parse(text, method=method, fmt=fmt, tree_shape=tree_shape, cached_id=cached_id, cache_path=cache_path)
 	if (method == 'stanford'):
 		return sf_tokens, sf_dpnd_dfs, sf_coref
