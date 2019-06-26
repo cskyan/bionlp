@@ -96,7 +96,7 @@ def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kw
 				c = ipp.Client(profile=client, timeout=5)
 				use_client = True
 			except Exception as e:
-				print 'Failed to connect to the ipcluster with profile_%s' % client
+				print('Failed to connect to the ipcluster with profile_%s' % client)
 		elif (type(client) is ipp.Client):
 			c = client
 			use_client = True
@@ -122,7 +122,7 @@ def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kw
 			time.sleep(0.01)
 			results = [r.get() for r in res_list]
 		else:
-			print 'No results return!'
+			print('No results return!')
 			results = []
 		if (not use_client):
 			c.shutdown(hub=True)
@@ -137,7 +137,7 @@ def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kw
 			c.close()
 			return results
 	except Exception as e:
-		print e
+		print(e)
 		if (not use_client):
 			pstart.terminate()
 			pend = Popen(['ipcluster', 'stop'])

@@ -11,7 +11,7 @@
 
 from binarytree import convert, pprint
 
-import func
+from . import func
 
 
 class Node(object):
@@ -35,7 +35,7 @@ try:
 			self.children.extend([x for x in [self.left, self.right] if x is not None])
 			self.up = self.parent
 except Exception as e:
-	print e
+	print(e)
 
 
 def from_childlist(node_list, order='bottom_up', node_type='normal'):

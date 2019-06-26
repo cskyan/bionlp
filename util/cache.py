@@ -9,8 +9,7 @@
 ###########################################################################
 #
 
-import os
-import json
+import os, json
 
 
 def mmc_json_srlz(key, value):
