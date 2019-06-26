@@ -65,7 +65,7 @@ CUSTOM_LOSS = {'_vecomnet_loss':_vecomnet_loss, 'w_binary_crossentropy':w_binary
 
 def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=None, backend='tf', device='', session=None, cross_device=True, mltl_accc=False, lstm_dim=128, lstm_num=2, ent_mlp_dim=128, evnt_mlp_dim=64, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None, precomp_vec=None, avgembd_idx=None):
 	main_cntxt = dict(device='/cpu:0') if cross_device else dict(device=device, session=session)
-	with kerasext.gen_cntxt(backend, **main_cntxt):
+	with kerasext.gen_cntxt(backend, use_sess=True, **main_cntxt):
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(4)]
 		if (pretrain_vecmdl is None and precomp_vec is None):
 			w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
@@ -147,6 +147,8 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=No
 			import tensorflow as tf
 			# kwargs['options'] = tf.RunOptions(report_tensor_allocations_upon_oom=True) # Will crash if low memory
 			optmzr = TFOptimizer(tf.train.GradientDescentOptimizer(learning_rate=0.1))
+			with session.as_default():
+				tf.global_variables_initializer().run()
 		model.compile(optimizer=optmzr, loss='binary_crossentropy', metrics=['acc', 'mse'], **kwargs)
 	return model
 
@@ -154,7 +156,11 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=No
 def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=None, backend='tf', device='', session=None, cross_device=True, mltl_accc=False, conv_dim=128, conv_ksize=4, maxp_size=2, lstm_dim=128, lstm_num=2, mlp_dim=128, drop_ratio=0.2, class_weight=None, pretrain_vecmdl=None, avgembd_idx=None):
 	if (pretrain_vecmdl is not None): return pretrain_vecmdl
 	main_cntxt = dict(device='/cpu:0') if cross_device else dict(device=device, session=session)
-	with kerasext.gen_cntxt(backend, **main_cntxt):
+	# import tensorflow as tf
+	# graph = tf.get_default_graph()
+	with kerasext.gen_cntxt(backend, use_sess=True, **main_cntxt):
+	# with kerasext.gen_cntxt(backend, device, session=session):
+	# with tf.device('/cpu:0'):
 		X_inputs = [Input(shape=(input_dim,), dtype='int64', name='X%i'%i) for i in range(2)]
 		w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
 		embd_layer = w2v_wrapper.get_embedding_layer(type='keras', trainable=False, name='WordEmbedding')
@@ -203,12 +209,14 @@ def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=N
 		model = Model(X_inputs, output)
 		optmzr = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
 		loss = func.wrapped_partial(w_binary_crossentropy, weights=class_weight.mean(axis=0) if (output_dim > 1 and class_weight is not None) else class_weight)
-		plot_model(model, show_shapes=True, to_file='model.png')
+		# plot_model(model, show_shapes=True, to_file='model.png')
 		kwargs = {}
 		if (backend == 'tf'):
 			import tensorflow as tf
 			# kwargs['options'] = tf.RunOptions(report_tensor_allocations_upon_oom=True) # Will crash if low memory
 			optmzr = TFOptimizer(tf.train.GradientDescentOptimizer(learning_rate=0.1))
+			with session.as_default():
+				tf.global_variables_initializer().run()
 		model.compile(optimizer=optmzr, loss=loss, metrics=['acc', 'mse'], **kwargs)
 	return model
 

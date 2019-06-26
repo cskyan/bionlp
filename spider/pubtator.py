@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, sys, copy, json, time, requests, urlparse
+import os, sys, copy, json, time, requests, urlparse, hashlib, pickle
 
 import numpy as np
 
@@ -38,7 +38,7 @@ class PubTatorAPI():
 	def _check_type(self, type):
 		if not (PubTatorAPI._type_url.has_key(type) or PubTatorAPI._type_trg.has_key(type)):
 			raise ValueError('The type %s is not supported!' % type)
-			
+
 	def _handle_response(self, response):
 		if (self.format == 'JSON'):
 			res = json.loads(nlp.clean_text(response.data, encoding='utf-8', replacement=None).replace('\\', ''))
@@ -46,7 +46,7 @@ class PubTatorAPI():
 			res = response.data
 		self.format = None
 		return res
-	
+
 	def get_concepts_pmid(self, type, pmid, fmt='JSON'):
 		type = type.lower()
 		# if (type == 'all'):
@@ -69,27 +69,46 @@ class PubTatorAPI():
 			else:
 				fs.write_file(res.text, cache_path, code='utf-8')
 			return res.json() if fmt=='JSON' else res.text
-		
-	def get_concepts_rawtxt(self, type, text, sleep_time=10, timeout=600):
-		type = type.lower()
-		if (type == 'all'):
-			res_list = [self.get_concepts_rawtxt(type=tp, text=text, sleep_time=sleep_time, timeout=timeout) for tp in PubTatorAPI._type_trg.keys()]
+
+	def get_concepts_rawtxt(self, ctype, text, sleep_time=10, timeout=600):
+		ctype = ctype.lower()
+		if (ctype == 'all'):
+			res_list = [self.get_concepts_rawtxt(ctype=tp, text=text, sleep_time=sleep_time, timeout=timeout) for tp in PubTatorAPI._type_trg.keys()]
 			denotations = func.flatten_list([res['denotations'] for res in res_list])
 			return func.update_dict(copy.deepcopy(res_list[0]), {u'denotations':denotations})
-		self._check_type(type)
+		self._check_type(ctype)
+		fs.mkdir(os.path.join(self.cache_dir, ctype))
+		cache_path = os.path.join(self.cache_dir, ctype, 'rawtxt.pkl')
+		txt_md5, cache = hashlib.md5(text.encode('utf-8')).hexdigest(), {}
+		if os.path.isfile(cache_path):
+			try:
+				with open(cache_path, 'rb') as fd:
+					cache.update(pickle.load(fd))
+					if txt_md5 in cache and cache[txt_md5][0] == text: return cache[txt_md5][1]
+			except Exception as e:
+				print(e)
 		data = '{"sourcedb":"PubMed","sourceid":"1000001","text":"%s"}' % text
-		sess_id = requests.post(url=urlparse.urljoin(PubTatorAPI.BASE_URL, '%s/Submit' % PubTatorAPI._type_trg[type]), data=data).text
+		sess_id = requests.post(url=urlparse.urljoin(PubTatorAPI.BASE_URL, '%s/Submit' % PubTatorAPI._type_trg[ctype]), data=data).text
 		wait_time, res = 0, {}
 		while (not res and wait_time < timeout):
 			res = requests.get(url=urlparse.urljoin(PubTatorAPI.BASE_URL, '%s/Receive' % sess_id))
 			res = {} if not res.ok or 'The Result is not ready' in res.text else res
 			time.sleep(sleep_time)
 			wait_time += sleep_time
-		return {} if not res.text or res.text.isspace() else res.json()
-		
-	def get_concepts_rawtxtlist(self, type, text_list, sleep_time=10, timeout=600):
+		try:
+			out = {} if not res.text or res.text.isspace() else res.json()
+		except Exception as e:
+			print(e)
+			out = res
+		with open(cache_path, 'wb') as fd:
+			if type(out)==dict: cache[txt_md5] = (text, out)
+			pickle.dump(cache, fd)
+		return out
+		# return {} if not res.text or res.text.isspace() else res.json()
+
+	def get_concepts_rawtxtlist(self, ctype, text_list, sleep_time=10, timeout=600):
 		text = SC.join(text_list)
-		all_res = self.get_concepts_rawtxt(type=type, text=text, sleep_time=sleep_time, timeout=timeout)
+		all_res = self.get_concepts_rawtxt(ctype=ctype, text=text, sleep_time=sleep_time, timeout=timeout)
 		if (not all_res): return all_res
 		sc_chnum = len(SC)
 		txt_len = [0] + [len(txt) + sc_chnum for txt in text_list]

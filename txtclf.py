@@ -148,7 +148,9 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 		print 'fscore: %0.3f' % fscore
 
 	print 'classification report:'
-	print metrics.classification_report(Y_test, pred)
+	# print metrics.classification_report(Y_test, pred)
+	metric_df = pd.DataFrame(metrics.classification_report(Y_test, pred, output_dict=True)).T[['precision', 'recall', 'f1-score', 'support']]
+	print metric_df
 
 	print 'confusion matrix:'
 	if (is_mltl):
@@ -261,9 +263,9 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 				filt_feat_idx = filt_feat_idx[cmpn.get_support()]
 	print '\n'
 	if (is_mltl and average == 'all'):
-		return {'accuracy':accuracy, 'micro-precision':micro_precision, 'micro-recall':micro_recall, 'micro-fscore':micro_fscore, 'macro-precision':macro_precision, 'macro-recall':macro_recall, 'macro-fscore':macro_fscore, 'train_time':train_time, 'test_time':test_time, 'micro-roc':micro_roc, 'macro-roc':macro_roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred}
+		return {'accuracy':accuracy, 'micro-precision':micro_precision, 'micro-recall':micro_recall, 'micro-fscore':micro_fscore, 'macro-precision':macro_precision, 'macro-recall':macro_recall, 'macro-fscore':macro_fscore, 'train_time':train_time, 'test_time':test_time, 'micro-roc':micro_roc, 'macro-roc':macro_roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred, 'metrics':metric_df}
 	else:
-		return {'accuracy':accuracy, 'precision':precision, 'recall':recall, 'fscore':fscore, 'train_time':train_time, 'test_time':test_time, 'roc':roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred, 'pred_prob':orig_prob}
+		return {'accuracy':accuracy, 'precision':precision, 'recall':recall, 'fscore':fscore, 'train_time':train_time, 'test_time':test_time, 'roc':roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred, 'pred_prob':orig_prob, 'metrics':metric_df}
 
 
 # Calculate the venn digram overlaps
@@ -346,6 +348,7 @@ def save_featw(features, crsval_featw, crsval_subfeatw, cfg_param={}, lbid=''):
 
 # Classification
 def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_param={}, global_param={}, lbid=''):
+	print 'Classifing...'
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
 	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
@@ -518,6 +521,7 @@ def kf2data(kf, X, Y, to_hdf=False, hdf5_fpath='crsval_dataset.h5'):
 
 # Evaluation
 def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='micro', kfold=5, cfg_param={}, global_param={}, lbid=''):
+	print 'Evaluating...'
 	from keras.utils.io_utils import HDF5Matrix
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
@@ -578,7 +582,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 			X_train = [x.iloc[all_train_idx] if type(x) != HDF5Matrix else x[all_train_idx] for x in X_train] if (type(X_train) is list) else X_train.iloc[all_train_idx] if type(x) != HDF5Matrix else X_train[all_train_idx]
 			Y_train = Y_train[all_train_idx,:] if (len(Y_train.shape) > 1) else Y_train[all_train_idx]
 	results, preds = [[] for x in range(2)]
-	Y_test = np.column_stack([np.abs(Y_test).reshape((Y_test.shape[0],-1))] + [label_binarize(lb, classes=[-1,1,0])[:,1] for lb in (np.sign(Y_test).astype('int8').reshape((Y_test.shape[0],-1))).T]) if (len(Y_test.shape) < 2 or Y_test.shape[1] == 1 or np.where(Y_test<0)[0].shape[0]>0) else Y_test
+	# Y_test = np.column_stack([np.abs(Y_test).reshape((Y_test.shape[0],-1))] + [label_binarize(lb, classes=[-1,1,0])[:,1] for lb in (np.sign(Y_test).astype('int8').reshape((Y_test.shape[0],-1))).T]) if (len(Y_test.shape) < 2 or Y_test.shape[1] == 1 or np.where(Y_test<0)[0].shape[0]>0) else Y_test
 	for vars in model_iter(**model_param):
 		if (global_param['comb']):
 			mdl_name, mdl = [vars[x] for x in range(2)]
@@ -600,6 +604,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 		PL_SET.add(model_name)
 		print model_name
 		# Benchmark results
+
 		bm_results = benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=is_mltl, signed=global_param.setdefault('signed', True if np.where(Y_train<0)[0].shape[0]>0 else False), average=avg)
 		# Clear the model environment (e.g. GPU resources)
 		del pipeline
@@ -752,6 +757,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 
 # Cross validation
 def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_param={}, split_param={}, global_param={}, lbid=''):
+	print 'Cross validating...'
 	from keras.utils.io_utils import HDF5Matrix
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
@@ -849,6 +855,8 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 			if (is_mltl and avg == 'all'):
 				results.append([bm_results[x] for x in ['accuracy', 'micro-precision', 'micro-recall', 'micro-fscore', 'macro-precision', 'macro-recall', 'macro-fscore', 'train_time', 'test_time']])
 			else:
+				# for k, v in zip(['precision', 'recall', 'fscore'], bm_results['metrics'].loc['weighted avg',['precision', 'recall', 'f1-score']]):
+				# 	bm_results[k] = v
 				results.append([bm_results[x] for x in ['accuracy', 'precision', 'recall', 'fscore', 'train_time', 'test_time']])
 			preds.append(bm_results['pred_lb'])
 			if (cfg_param.setdefault('save_crsval_pred', False)):

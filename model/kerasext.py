@@ -18,6 +18,7 @@ from keras.layers import Lambda
 from keras.models import Sequential, load_model, model_from_json
 from keras.wrappers.scikit_learn import KerasClassifier
 import keras.backend as K
+import tensorflow as tf
 
 from ..util import fs, io, math, func, njobs
 
@@ -33,6 +34,8 @@ class BaseWrapper(KerasClassifier):
 		self.proba_thrsh = proba_thrsh
 		self.n_jobs = n_jobs
 		self.histories = []
+	def __del__(self):
+		clear_session()
 	# def __del__(self):
 		# if (hasattr(self, 'context') and self.context.setdefault('session', None) is not None):
 			# self.context['session'].close()
@@ -41,6 +44,7 @@ class BaseWrapper(KerasClassifier):
 				# import keras.backend.tensorflow_backend as K
 				# K.clear_session()
 				# K.set_session(None)
+
 	def fit(self, X, y, **kw_args):
 		try:
 			with gen_cntxt(**self.context):
@@ -319,6 +323,7 @@ class KerasCluster(KerasClassifier):
 def init(dev_id=0, backend='tf', num_gpu=0, gpuq=[0], gpu_mem=None, num_process=1, use_omp=False, verbose=False):
 	global NUM_PROCESS, PHSCL_DEV_ID, DEVICE_ID, DEV, DEV_IDQ, DEVICE_INIT
 	if (DEVICE_INIT): return
+	print('Initializing Keras environment...')
 	NUM_PROCESS, PHSCL_DEV_ID, DEVICE_ID = num_process, gpuq[dev_id], dev_id
 	os.environ['KERAS_BACKEND'] = BEMAP[backend]
 	DEV_IDQ = ','.join(map(str, gpuq))
@@ -369,46 +374,48 @@ def get_dummy(**kwargs):
 
 
 # Factory method for generating Keras Model
-def gen_mdl(input_dim, output_dim, model, mdl_type='clf', backend='th', session=None, verbose=False, udargs=['input_dim', 'output_dim', 'backend', 'device', 'session'], **kwargs):
+def gen_mdl(input_dim, output_dim, model, mdl_type='clf', backend='tf', session=None, verbose=False, udargs=['input_dim', 'output_dim', 'backend', 'device', 'session'], **kwargs):
 	global PHSCL_DEV_ID, DEVICE_ID, DEV, DEV_IDQ, DEVICE_INIT, DEVICE_VARS
 	if (not DEVICE_INIT):
 		init(backend=backend)
 	device = DEV
-	# Each model keeps one session, create a new one or reuse the previous one
-	if (backend == 'tf'):
-		if (session is None):
-			import keras.backend.tensorflow_backend as K
-			with gen_cntxt(backend, device):
-				if (device.lower().startswith('/gpu')):
-					config = K.tf.ConfigProto(allow_soft_placement=True, log_device_placement=verbose)
-					config.gpu_options.visible_device_list = DEV_IDQ
-					config.gpu_options.per_process_gpu_memory_fraction=DEVICE_VARS['gpu_mem']
-					config.gpu_options.allow_growth=True
-				else:
-					config = K.tf.ConfigProto(device_count={'gpu':0, 'cpu': 1}, allow_soft_placement=True, inter_op_parallelism_threads=NUM_PROCESS, intra_op_parallelism_threads=NUM_PROCESS, log_device_placement=verbose)
-				# if DEVICE_VARS.has_key('sess'):
-					# DEVICE_VARS['sess'].close()
-					# del DEVICE_VARS['sess']
-				from numba import cuda
-				try:
-					cuda.get_current_device().reset()
-				except Exception as e:
-					print e
-				K.clear_session()
-				while True:
-					try:
-						session = K.tf.Session(config=config)
-						break
-					except Exception as e:
-						print e
-						time.sleep(5)
-				# session = DEVICE_VARS.setdefault('sess', K.tf.Session(config=config))
-		else:
-			K.set_session(session)
+	# !!Each model keeps one session, create a new one or reuse the previous one!! #
+	# if (backend == 'tf'):
+	# 	if (session is None):
+	# 		import keras.backend.tensorflow_backend as K
+	# 		with gen_cntxt(backend, device, use_sess=True):
+	# 			if (device.lower().startswith('/gpu')):
+	# 				config = K.tf.ConfigProto(allow_soft_placement=True, log_device_placement=verbose)
+	# 				config.gpu_options.visible_device_list = DEV_IDQ
+	# 				config.gpu_options.per_process_gpu_memory_fraction=DEVICE_VARS['gpu_mem']
+	# 				config.gpu_options.allow_growth=True
+	# 			else:
+	# 				config = K.tf.ConfigProto(device_count={'gpu':0, 'cpu': 1}, allow_soft_placement=True, inter_op_parallelism_threads=NUM_PROCESS, intra_op_parallelism_threads=NUM_PROCESS, log_device_placement=verbose)
+	# 			# if DEVICE_VARS.has_key('sess'):
+	# 				# DEVICE_VARS['sess'].close()
+	# 				# del DEVICE_VARS['sess']
+	# 			# Use Numba to release the GPU memory occupied by tensorflow
+	# 			from numba import cuda
+	# 			try:
+	# 				cuda.get_current_device().reset()
+	# 			except Exception as e:
+	# 				print e
+	# 			K.clear_session()
+	# 			while True:
+	# 				try:
+	# 					session = K.tf.Session(config=config)
+	# 					break
+	# 				except Exception as e:
+	# 					print e
+	# 					time.sleep(5)
+	# 	else:
+	# 		K.set_session(session)
+
+	if (session is None): session = gen_cntxt(backend, DEV, use_sess=True, verbose=verbose).sess
 	if (udargs):
 		kwargs.update({k:v for k, v in [(x, locals()[x]) for x in udargs]})
 	if (mdl_type == 'clf'):
-		return BaseWrapper(build_fn=model, verbose=verbose, **kwargs)
+		return BaseWrapper(build_fn=model, context=dict(backend=backend, device=device, session=session), verbose=verbose, **kwargs)
 	elif (mdl_type == 'mlclf'):
 		return MLClassifier(build_fn=model, context=dict(backend=backend, device=device, session=session), verbose=verbose, **kwargs)
 	elif (mdl_type == 'signedclf'):
@@ -447,32 +454,70 @@ def gen_cltmdl(proba_thrsh=0.5, context=None, session=None, **kwargs):
 			super(CLTModel, self).__del__()
 	return CLTModel(context=context, session=session, **kw_args)
 
+def clear_session():
+	# K.clear_session() # Will affect cross device graph runing in tensorflow
+	# Use Numba to release the GPU memory occupied by tensorflow
+	from numba import cuda
+	try:
+		cuda.get_current_device().reset()
+		pass
+	except Exception as e:
+		print e
 
-def gen_cntxt(backend='th', device=DEV, session=None):
+def gen_cntxt(backend='tf', device=DEV, session=None, use_sess=True, verbose=False):
 	'''
 	Factory method for Keras context object
+
+	It is a virtual concept of the runing environment, containing a session object that might be reused by other context. If the session is not passed then a new session will be generated. When the context is opened, it will set the session in the backend.
 	'''
+	global PHSCL_DEV_ID, DEVICE_ID, DEV, DEV_IDQ, DEVICE_INIT, DEVICE_VARS
 	class KerasContext():
-		def __init__(self, be, dev, sess):
+		def __init__(self, be, dev, sess=None, use_sess=True, verbose=False):
 			self.be = be
 			self.dev = dev
-			self.sess = sess
+			if use_sess:
+				if sess is None and be == 'tf':
+					import tensorflow as tf
+					if (dev.lower().startswith('/gpu')):
+						config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=verbose)
+						# config.gpu_options.visible_device_list = DEV_IDQ
+						config.gpu_options.visible_device_list = '2'
+						config.gpu_options.per_process_gpu_memory_fraction=DEVICE_VARS['gpu_mem']
+						config.gpu_options.allow_growth=True
+					else:
+						config = tf.ConfigProto(device_count={'GPU':0}, allow_soft_placement=True, inter_op_parallelism_threads=NUM_PROCESS, intra_op_parallelism_threads=NUM_PROCESS, log_device_placement=verbose)
+						config.gpu_options.visible_device_list = ''
+					# if DEVICE_VARS.has_key('sess'):
+					# 	DEVICE_VARS['sess'].close()
+						# del DEVICE_VARS['sess']
+					while True:
+						try:
+							sess = tf.Session(config=config)
+							break
+						except Exception as e:
+							print e
+							time.sleep(5)
+					# DEVICE_VARS['sess'] = sess
+				self.sess = sess
+			else:
+				self.sess = None
+			self.use_sess = use_sess
 			if (self.be == 'tf'):
-				import keras.backend.tensorflow_backend as tfbe
-				self.cntxt = tfbe.tf.device(self.dev)
+				import tensorflow as tf
+				self.cntxt = tf.device(self.dev)
 			else:
 				self.cntxt = None
+
 		def __enter__(self):
+			if self.use_sess and self.be == 'tf':
+				# sess = DEVICE_VARS.setdefault('sess', None)
+				# if sess is not None and self.sess != sess:
+				K.set_session(self.sess)
 			return self.cntxt
 		def __exit__(self, type, value, traceback):
 			pass
-	if (not DEVICE_INIT):
-		init(backend=backend)
-		device = DEV
-	if (backend == 'tf'):
-		return KerasContext(backend, device, session).cntxt
-	else:
-		return KerasContext(backend, device, session)
+	if (not DEVICE_INIT): init(backend=backend)
+	return KerasContext(backend, device, sess=session, use_sess=use_sess, verbose=verbose)
 
 
 ## Custom Metrics
