@@ -18,13 +18,13 @@ import numpy as np
 def split_1d(task_num, split_num=None, task_size=None, split_size=None, ret_idx=False):
 	if (split_num is None):
 		if (task_size is None or split_size is None):
-			return range(task_num+1) if ret_idx else [1] * task_num
-		group_size = max(1, split_size / task_size)
-		split_num = task_num / group_size
+			return list(range(task_num+1)) if ret_idx else [1] * task_num
+		group_size = max(1, int(split_size / task_size))
+		split_num = int(task_num / group_size)
 		remainder = task_num % group_size
 		results = [group_size] * split_num if (remainder == 0) else [group_size] * split_num + [remainder]
 	else:
-		group_size = task_num / split_num
+		group_size = int(task_num / split_num)
 		remainder = task_num % split_num
 		results = [group_size] * split_num if (remainder == 0) else [group_size + 1] * remainder + [group_size] * (split_num - remainder)
 	return np.cumsum([0]+results).tolist() if ret_idx else results
@@ -33,8 +33,8 @@ def split_1d(task_num, split_num=None, task_size=None, split_size=None, ret_idx=
 def split_2d(task_grid, split_num=None, task_size=None, split_size=None, ret_idx=False):
 	if (split_num is None):
 		if (task_size is None or split_size is None):
-			return [range(task_grid[0]+1), range(task_grid[1])+1] if ret_idx else [[1] * task_grid[0], [1] * task_grid[1]]
-		group_size = max(1, split_size / task_size)
+			return [list(range(task_grid[0]+1)), list(range(task_grid[1]))+1] if ret_idx else [[1] * task_grid[0], [1] * task_grid[1]]
+		group_size = max(1, int(split_size, task_size))
 		factor = (1.0 * group_size / np.product(task_grid))**0.5
 		_grid = np.array(task_grid) * factor
 		grid = _grid.round().astype('int')
@@ -63,7 +63,7 @@ def run_pool(target, n_jobs=1, pool=None, ret_pool=False, dist_param=[], **kwarg
 	if (pool is None):
 		pool = Pool(processes=n_jobs)
 	# Separate iterable arguments and singular arguments
-	for k, v in kwargs.iteritems():
+	for k, v in kwargs.items():
 		if (k in dist_param and hasattr(v, '__iter__')):
 			iter_kwargs[k] = v
 		else:
@@ -96,7 +96,7 @@ def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kw
 				c = ipp.Client(profile=client, timeout=5)
 				use_client = True
 			except Exception as e:
-				print 'Failed to connect to the ipcluster with profile_%s' % client
+				print('Failed to connect to the ipcluster with profile_%s' % client)
 		elif (type(client) is ipp.Client):
 			c = client
 			use_client = True
@@ -107,7 +107,7 @@ def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kw
 			c = ipp.Client(timeout=5)
 		res_list, fix_kwargs, iter_kwargs = [], {}, {}
 		# Separate iterable arguments and singular arguments
-		for k, v in kwargs.iteritems():
+		for k, v in kwargs.items():
 			if (k in dist_param and hasattr(v, '__iter__')):
 				iter_kwargs[k] = v
 			else:
@@ -122,7 +122,7 @@ def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kw
 			time.sleep(0.01)
 			results = [r.get() for r in res_list]
 		else:
-			print 'No results return!'
+			print('No results return!')
 			results = []
 		if (not use_client):
 			c.shutdown(hub=True)
@@ -137,7 +137,7 @@ def run_ipp(target, n_jobs=1, client=None, ret_client=False, dist_param=[], **kw
 			c.close()
 			return results
 	except Exception as e:
-		print e
+		print(e)
 		if (not use_client):
 			pstart.terminate()
 			pend = Popen(['ipcluster', 'stop'])

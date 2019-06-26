@@ -9,19 +9,13 @@
 ###########################################################################
 #
 
-import os
-import sys
-import yaml
-import json
-import time
-import errno
-import cStringIO
-import cPickle as pickle
+import os, sys, yaml, json, time, errno, pickle
+
 import numpy as np
 import pandas as pd
 from scipy import sparse
 
-import fs
+from . import fs, io
 
 
 def inst_print(text):
@@ -38,7 +32,7 @@ def read_json(fpath):
 
 
 def parse_json(json_str):
-	fp = cStringIO.StringIO(json_str)
+	fp = io.StringIO(json_str)
 	return json.load(fp)
 
 
@@ -46,17 +40,17 @@ def write_obj(obj, fpath='obj'):
 	fs.mkdir(os.path.dirname(fpath))
 	with open(os.path.splitext(fpath)[0] + '.pkl', 'wb') as f:
 		pickle.dump(obj, f)
-	
-	
+
+
 def read_obj(fpath):
 	fpath = os.path.splitext(fpath)[0] + '.pkl'
 	if (os.path.exists(fpath)):
 		with open(fpath, 'rb') as f:
 			return pickle.load(f)
 	else:
-		print 'File %s does not exist!' % fpath
-		
-		
+		print(('File %s does not exist!' % fpath))
+
+
 def write_npz(ndarray, fpath='ndarray', compress=False):
 #	fs.mkdir(os.path.dirname(fpath))
 	if (compress):
@@ -67,16 +61,16 @@ def write_npz(ndarray, fpath='ndarray', compress=False):
 		save_f(os.path.splitext(fpath)[0] + '.npz', **ndarray)
 	elif (type(ndarray) == np.ndarray):
 		save_f(os.path.splitext(fpath)[0] + '.npz', data=ndarray)
-	
+
 
 def read_npz(fpath):
 	fpath = os.path.splitext(fpath)[0] + '.npz'
 	if (os.path.exists(fpath)):
 		return np.load(fpath)
 	else:
-		print 'File %s does not exist!' % fpath
-		
-		
+		print(('File %s does not exist!' % fpath))
+
+
 def write_spmt(mt, fpath, sparse_fmt='csr', compress=False):
 	fs.mkdir(os.path.dirname(fpath))
 	fpath = os.path.splitext(fpath)[0] + '.npz'
@@ -92,8 +86,8 @@ def write_spmt(mt, fpath, sparse_fmt='csr', compress=False):
 		save_f(fpath, data=mt.data, indices=mt.indices, indptr=mt.indptr, shape=mt.shape)
 	else:
 		write_spmt(mt.tocsr(), fpath, sparse_fmt='csr', compress=compress)
-		
-		
+
+
 def read_spmt(fpath, sparse_fmt='csr'):
 	npzfile = read_npz(fpath)
 	if (sparse_fmt == 'csc'):
@@ -118,8 +112,8 @@ def write_df(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compress
 	elif (sparse_fmt == 'csr'):
 		sp_mt = sparse.csr_matrix(df.values)
 		save_f(fpath, data=sp_mt.data, indices=sp_mt.indices, indptr=sp_mt.indptr, shape=sp_mt.shape, col=df.columns.values if with_col else None, idx=df.index.values if with_idx else None)
-		
-		
+
+
 def read_df(fpath, with_col=True, with_idx=False, sparse_fmt=None):
 	npzfile = read_npz(fpath)
 	if (sparse_fmt == None or (type(sparse_fmt) == str and sparse_fmt.lower() == 'none')):
@@ -129,8 +123,8 @@ def read_df(fpath, with_col=True, with_idx=False, sparse_fmt=None):
 	elif (sparse_fmt == 'csr'):
 		mt = sparse.csr_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape']).todense()
 	return pd.DataFrame(data=mt, index=npzfile['idx'] if with_idx and len(npzfile['idx'].shape) == 1 else None, columns=npzfile['col'] if len(npzfile['col'].shape) == 1 else None)
-	
-	
+
+
 def write_spdf(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compress=False):
 	fs.mkdir(os.path.dirname(fpath))
 	fpath = os.path.splitext(fpath)[0] + '.npz'
@@ -146,8 +140,8 @@ def write_spdf(df, fpath, with_col=True, with_idx=False, sparse_fmt=None, compre
 	elif (sparse_fmt == 'csr'):
 		sp_mt = sparse.csr_matrix(df['values'])
 		save_f(fpath, data=sp_mt.data, indices=sp_mt.indices, indptr=sp_mt.indptr, shape=sp_mt.shape, col=df['columns'] if with_col else None, idx=df['index'] if with_idx else None)
-	
-	
+
+
 def read_spdf(fpath, with_col=True, with_idx=False, sparse_fmt=None):
 	npzfile = read_npz(fpath)
 	if (sparse_fmt == None or (type(sparse_fmt) == str and sparse_fmt.lower() == 'none')):
@@ -157,8 +151,8 @@ def read_spdf(fpath, with_col=True, with_idx=False, sparse_fmt=None):
 	elif (sparse_fmt == 'csr'):
 		mt = sparse.csr_matrix((npzfile['data'], npzfile['indices'], npzfile['indptr']), shape=npzfile['shape'])
 	return dict(values=mt, shape=mt.shape, index=npzfile['idx'] if with_idx and len(npzfile['idx'].shape) == 1 else None, columns=npzfile['col'] if len(npzfile['col'].shape) == 1 else None)
-	
-	
+
+
 def df2gen(df, batch_size=32, cache_fpath='tmp_data.h5', table_id=None):
 	'''
 	Transform Pandas DataFrame into Generator
@@ -177,23 +171,23 @@ def df2gen(df, batch_size=32, cache_fpath='tmp_data.h5', table_id=None):
 			yield sub_df
 			del sub_df
 
-	
+
 def write_yaml(data, fpath, append=False, dfs=False):
 #	fs.mkdir(os.path.dirname(fpath))
 	fpath = os.path.splitext(fpath)[0] + '.yaml'
 	with open(fpath, 'a' if append else 'w') as f:
 		yaml.dump(data, f, default_flow_style=dfs)
-	
-	
+
+
 def read_yaml(fpath):
 	fpath = os.path.splitext(fpath)[0] + '.yaml'
 	if (os.path.exists(fpath)):
 		with open(fpath, 'r') as f:
 			return yaml.load(f)
 	else:
-		print 'File %s does not exist!' % fpath
-	
-	
+		print(('File %s does not exist!' % fpath))
+
+
 def param_writer(fpath):
 	data = {}
 	def add_params(mdl_t, mdl_name, params, finished=False, data=data):
@@ -209,51 +203,51 @@ def param_writer(fpath):
 			try:
 				write_yaml(data, fpath)
 			except:
-				print 'Cannot writer the data: %s' % data
+				print(('Cannot writer the data: %s' % data))
 				return
 	return add_params
 
-	
+
 def param_reader(fpath):
 	data = read_yaml(fpath)
 	def get_params(mdl_t, mdl_name, data=data):
 		if (not data):
-			print 'Cannot find the config file: %s' % fpath
+			print(('Cannot find the config file: %s' % fpath))
 			return {}
-		if (data.has_key(mdl_t)):
+		if (mdl_t in data):
 			mdl_list = data[mdl_t]
 		else:
-			print 'Model type %s does not exist.' % mdl_t
+			print(('Model type %s does not exist.' % mdl_t))
 			return {}
 		for mdl in mdl_list:
 			if (mdl['name'] == mdl_name):
 				return mdl['params']
 		else:
-			print 'Parameters of model %s does not exist.' % mdl_name
+			print(('Parameters of model %s does not exist.' % mdl_name))
 			return {}
 	return get_params
-	
-	
+
+
 def cfg_reader(fpath):
 	data = read_yaml(fpath)
 	def get_params(module, function, data=data):
 		if (not data):
-			print 'Cannot find the config file: %s' % fpath
+			print(('Cannot find the config file: %s' % fpath))
 			return {}
-		if (data.has_key(module)):
+		if (module in data):
 			func_list = data[module]
 		else:
-			print 'Module %s does not exist.' % module
+			print(('Module %s does not exist.' % module))
 			return {}
 		for func in func_list:
 			if (func['function'] == function):
 				return func['params']
 		else:
-			print 'Parameters of function %s does not exist.' % func
+			print(('Parameters of function %s does not exist.' % func))
 			return {}
 	return get_params
-	
-	
+
+
 def lockf(flpath, wait_time=1):
 	if sys.platform.startswith('linux2'):
 		import fcntl
@@ -270,7 +264,7 @@ def lockf(flpath, wait_time=1):
 			else:
 				time.sleep(wait_time)
 	return x
-				
+
 def unlockf(flpath):
 	if sys.platform.startswith('linux2'):
 		import fcntl
