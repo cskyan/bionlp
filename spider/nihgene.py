@@ -9,20 +9,12 @@
 ###########################################################################
 #
 
-import os
-import re
-import sys
-import types
-import string
-import urllib
-import urllib2
-import codecs
-import xmlextrc
-
-from cStringIO import StringIO
+import os, re, sys, types, string, codecs, urllib
+from io import StringIO
 
 from .. import nlp
 from ..util import fs, func, njobs
+from . import xmlextrc
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
@@ -49,26 +41,26 @@ class NIHGene():
 		self.sources = []
 		self.lineage = []
 		self.synonyms = []
-		
+
 		self.enter_commprop = False
 		self.enter_comm = False
-		
+
 		self.enter_prop = False
 		self.enter_src = False
-		
-		
+
+
 		self.enter_gene = False
 		self.enter_generefdb = False
 		self.enter_db = False
-		
+
 		self.enter_comment = False
 		self.enter_org = False
-		
+
 		self.enter_loc = False
 		self.enter_map = False
-		
+
 		self.enter_syn = False
-		
+
 	def start(self, tag, attrib):
 		self._tag = tag.split('}')[1] if '}' in tag else tag # Remove the namespace
 		self._tag_stack.append(self._tag)
@@ -86,7 +78,7 @@ class NIHGene():
 			self.enter_prop = True
 		if (self._tag == 'Entrezgene_source'):
 			self.enter_src = True
-			
+
 		if (self._tag == 'Entrezgene_gene'):
 			self.enter_gene = True
 		if (self._tag == 'Gene-ref_db'):
@@ -105,10 +97,10 @@ class NIHGene():
 			self.enter_map = True
 		if (self._tag == 'Maps_method_map-type'):
 			self._obj['mtype'] = attrib['value']
-			
+
 		if (self._tag == 'Gene-ref_syn'):
 			self.enter_syn = True
-	
+
 	def end(self, tag):
 		self._tag = tag.split('}')[1] if '}' in tag else tag # Remove the namespace
 		self._tag_stack.pop()
@@ -122,7 +114,7 @@ class NIHGene():
 			self.enter_prop = False
 		if (self._tag == 'Entrezgene_source'):
 			self.enter_src = False
-			
+
 		if (self._tag == 'Entrezgene_gene'):
 			self.enter_gene = False
 		if (self._tag == 'Gene-ref_db'):
@@ -134,13 +126,13 @@ class NIHGene():
 			self.enter_comment = False
 		if (self._tag == 'BioSource_org'):
 			self.enter_org = False
-			
+
 		if (self._tag == 'Entrezgene_location'):
 			self.enter_loc = False
 		if (self._tag == 'Maps'):
 			self.enter_map = False
 			self.locs.append(':'.join([self._obj['mtype'], self._obj['mstr']]))
-			
+
 		if (self._tag == 'Gene-ref_syn'):
 			self.enter_syn = False
 
@@ -164,7 +156,7 @@ class NIHGene():
 				self.symbol = data
 			elif (self._obj.setdefault('label', '') == 'Official Full Name' and self.enter_commprop and self.enter_prop):
 				self.fullname = data
-				
+
 		if (self._tag == 'Dbtag_db' and self.enter_db and self.enter_generefdb and self.enter_gene):
 			self._obj['db'] = data
 		if (self._tag == 'Object-id_str' and self.enter_db and self.enter_generefdb and self.enter_gene):
@@ -173,21 +165,21 @@ class NIHGene():
 		if (self._tag == 'Org-ref_taxname' and self.enter_org and self.enter_src):
 			self.organism = data
 		if (self._tag == 'OrgName_lineage' and self.enter_org and self.enter_src):
-			self.lineage = map(string.strip, data.strip(' ;').split(';'))
-			
+			self.lineage = list(map(string.strip, data.strip(' ;').split(';')))
+
 		if (self._tag == 'Maps_display-str' and self.enter_map and self.enter_loc):
 			self._obj['mstr'] = data
-			
+
 		if (self._tag == 'Gene-ref_syn_E' and self.enter_syn and self.enter_gene):
 			self.synonyms.append(data)
-		
+
 	def close(self):
 		pass
 
 	def build(self):
 		return {'id':self.id, 'symbol':self.symbol, 'fullname':self.fullname, 'type':self.type, 'status':self.status, 'organism':self.organism, 'locs':';'.join(self.locs), 'sources':';'.join(self.sources), 'lineage':';'.join(self.lineage), 'synonyms':';'.join(self.synonyms)}
-	
-	
+
+
 def fetch_gene(ids, fmt='xml', buff_size=1, saved_path=GENE_PATH, ret_strio=False):
 	fmt2ext = {'text':'txt', 'xml':'xml', 'html':'html'}
 	fs.mkdir(saved_path)
@@ -202,7 +194,7 @@ def fetch_gene(ids, fmt='xml', buff_size=1, saved_path=GENE_PATH, ret_strio=Fals
 				gene_id = sub_ids[j] = SC.join(func.flatten_list(gene_id))
 				results[gene_id] = nested_genes
 			# Determine whether the gene id duplicate or invalid
-			if (results.has_key(gene_id) or not gene_id or gene_id.isspace() or gene_id=='0' or gene_id=='0.0'):
+			if (gene_id in results or not gene_id or gene_id.isspace() or gene_id=='0' or gene_id=='0.0'):
 				existed_ids.append(gene_id)
 				continue
 			# Read cache
@@ -214,11 +206,11 @@ def fetch_gene(ids, fmt='xml', buff_size=1, saved_path=GENE_PATH, ret_strio=Fals
 		query_ids = [x for x in sub_ids if x not in existed_ids]
 		if (len(query_ids) > 0):
 			id_str = ','.join(query_ids)
-			url = BASE_URL + "efetch.fcgi?db=gene&id=" + urllib.quote(id_str) + "&retmode=xml"
+			url = BASE_URL + "efetch.fcgi?db=gene&id=" + urllib.parse.quote(id_str) + "&retmode=xml"
 			try:
-				res = urllib2.urlopen(url).read()
+				res = urllib.request.urlopen(url).read()
 			except:
-				print 'Failed to fetch the genes: %s in NIH GENE database!' % id_str
+				print('Failed to fetch the genes: %s in NIH GENE database!' % id_str)
 			else:
 				count += len(query_ids)
 				for gene_id, gene_res in zip(query_ids, xmlextrc.extrc_list('Entrezgene-Set', 'Entrezgene', '.', None, res, 'xml')):
@@ -232,8 +224,8 @@ def fetch_gene(ids, fmt='xml', buff_size=1, saved_path=GENE_PATH, ret_strio=Fals
 				yield StringIO(results[gene_id]) if ret_strio else results[gene_id]
 	# if (count > 0):
 		# print "Number of newly downloaded NIHGENE documents: %i\n" % count
-	
-	
+
+
 def parse_gene(gene_fpath, fmt='xml'):
 	gene_str = '\n'.join(fs.read_file(gene_fpath))
 	if (not gene_str or gene_str.isspace()): return {}
@@ -242,12 +234,12 @@ def parse_gene(gene_fpath, fmt='xml'):
 	try:
 		parser.feed(nlp.clean_text(re.sub(u'[\x00-\x08\x0b-\x0c\x0e-\x1f]+', u'', gene_str), encoding='utf-8', replacement=None))
 	except Exception as err:
-		print 'Can not parse the file: %s' % gene_fpath
+		print('Can not parse the file: %s' % gene_fpath)
 		raise err
 	parser.close()
 	return builder.build()
-	
-	
+
+
 def parse_genes(gene_fpaths, fmt='xml'):
 	for i, gene_fpath in enumerate(gene_fpaths):
 		# Nested gene file paths
@@ -263,7 +255,7 @@ def parse_genes(gene_fpaths, fmt='xml'):
 		try:
 			parser.feed(nlp.clean_text(re.sub(u'[\x00-\x08\x0b-\x0c\x0e-\x1f]+', u'', gene_str), encoding='utf-8', replacement=None))
 		except Exception as err:
-			print 'Can not parse the file: %s' % ('No.%i'%i if isinstance(gene_fpaths, types.GeneratorType) else gene_fpaths[i])
+			print('Can not parse the file: %s' % ('No.%i'%i if isinstance(gene_fpaths, types.GeneratorType) else gene_fpaths[i]))
 			raise err
 		parser.close()
 		yield builder.build()

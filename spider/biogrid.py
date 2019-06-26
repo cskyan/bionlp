@@ -9,10 +9,7 @@
 ###########################################################################
 #
 
-import os
-import sys
-import copy
-import json
+import os, sys, copy, json
 
 from apiclient import APIClient
 # from abc import ABCMeta
@@ -32,7 +29,7 @@ class BioGRIDAPI(APIClient, object):
 	_function_url = {'interaction':'interaction'}
 	_default_param = {'interaction':dict(format='json', searchNames='true', includeInteractors='true', includeInteractorInteractions='false', taxId='9606|10090|10116', geneList='')}
 	def __init__(self, function='interaction', api_key=''):
-		if (not self._default_param.has_key(function)):
+		if (function not in self._default_param):
 			raise ValueError('The function %s is not supported!' % function)
 		if (not api_key or api_key.isspace()):
 			raise ValueError('The accesskey cannot be empty!')
@@ -46,12 +43,12 @@ class BioGRIDAPI(APIClient, object):
 			v['accesskey'] = api_key
 	def _handle_response(self, response):
 		return json.loads(nlp.clean_text(response.data, encoding='utf-8', replacement=None).replace('\\', ''))
-	
+
 	def call(self, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
-		args.update((k, v) for k, v in kwargs.iteritems() if args.has_key(k))
+		args.update((k, v) for k, v in kwargs.items() if k in args)
 		return APIClient.call(self, '/%s'% self.func_url, **args)
-		
+
 	def get_orgnsm(self):
 		args = copy.deepcopy(self._default_param[self.function])
 		return APIClient.call(self, '/organisms', **args)

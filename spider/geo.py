@@ -9,8 +9,7 @@
 ###########################################################################
 #
 
-import os
-import sys
+import os, sys
 
 import GEOparse
 
@@ -43,11 +42,11 @@ def fetch_geo(accessions, saved_path=GEO_PATH, skip_cached=False):
 			try:
 				res = GEOparse.get_GEO(geo=acc, destdir=saved_path)
 			except:
-				print 'Failed to fetch the GEO file: %s' % acc
+				print('Failed to fetch the GEO file: %s' % acc)
 				continue
 		count += 1
 		yield res
-	print "Number of obtained GEO documents: %i\n" % len(geo_set)
+	print("Number of obtained GEO documents: %i\n" % len(geo_set))
 
 
 def parse_geo(gse, view='brief', with_samp=True):
@@ -56,18 +55,18 @@ def parse_geo(gse, view='brief', with_samp=True):
 		for gsm_id, gsm in gse.gsms.items():
 			samples.append((gsm_id, update_keys(gsm.metadata, type='GSM')))
 	return (gse.get_accession(), update_keys(gse.metadata, type='GSE'), samples)
-	
+
 def parse_geos(gses, view='brief', with_samp=True):
 	results = []
 	for gse in gses:
 		results.append(parse_geo(gse, view=view, with_samp=with_samp))
 	return results
-	
+
 def update_keys(data, type='GSE'):
 	data['ftype'] = 'SERIES'if type.upper() == 'GSE' else 'SAMPLE'
 	key_map = GSE_KEYMAP if type.upper() == 'GSE' else GSM_KEYMAP
-	for k, v in key_map.iteritems():
-		if (data.has_key(k)):
+	for k, v in key_map.items():
+		if (k in data):
 			tmp = data[k]
 			del data[k]
 			data[v] = tmp
@@ -84,7 +83,7 @@ def update_keys(data, type='GSE'):
 			if (v == 'summary'):
 				keywords = []
 				paragraphs = data['summary']
-				for i in xrange(len(paragraphs) - 1, -1, -1):
+				for i in range(len(paragraphs) - 1, -1, -1):
 					if (paragraphs[i].startswith('Keywords')):
 						phrases = paragraphs[i].split(':')
 						if (len(phrases) == 1):

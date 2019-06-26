@@ -22,8 +22,8 @@ def extrc_list(listhead_path, elem_tag, content_path, xml_tree=None, xml_str='',
 		try:
 			xml_tree = ET.fromstring(xml_str.encode('utf-8'))
 		except ParseError as e:
-			print e
-			print xml_str.encode('utf-8').strip()
+			print(e)
+			print(xml_str.encode('utf-8').strip())
 	if (xml_tree.tag == listhead_path):
 		list_root = xml_tree
 	else:

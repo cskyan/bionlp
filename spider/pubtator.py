@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, sys, copy, json, time, requests, urlparse, hashlib, pickle
+import os, sys, copy, json, time, requests, hashlib, pickle, urllib
 
 import numpy as np
 
@@ -36,7 +36,7 @@ class PubTatorAPI():
 		self.cache_dir = cache_dir
 
 	def _check_type(self, type):
-		if not (PubTatorAPI._type_url.has_key(type) or PubTatorAPI._type_trg.has_key(type)):
+		if not (type in PubTatorAPI._type_url or type in PubTatorAPI._type_trg):
 			raise ValueError('The type %s is not supported!' % type)
 
 	def _handle_response(self, response):
@@ -63,7 +63,7 @@ class PubTatorAPI():
 				res = '\n'.join(fs.read_file(cache_path, code='utf-8'))
 			return res
 		else:
-			res = requests.get(url=urlparse.urljoin(PubTatorAPI.BASE_URL, '%s/%s/%s' % (PubTatorAPI._type_url[type], pmid, fmt)))
+			res = requests.get(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, '%s/%s/%s' % (PubTatorAPI._type_url[type], pmid, fmt)))
 			if fmt == 'JSON':
 				io.write_json(res.json() if res.text else [], cache_path, code='utf-8')
 			else:
@@ -88,10 +88,10 @@ class PubTatorAPI():
 			except Exception as e:
 				print(e)
 		data = '{"sourcedb":"PubMed","sourceid":"1000001","text":"%s"}' % text
-		sess_id = requests.post(url=urlparse.urljoin(PubTatorAPI.BASE_URL, '%s/Submit' % PubTatorAPI._type_trg[ctype]), data=data).text
+		sess_id = requests.post(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, '%s/Submit' % PubTatorAPI._type_trg[ctype]), data=data).text
 		wait_time, res = 0, {}
 		while (not res and wait_time < timeout):
-			res = requests.get(url=urlparse.urljoin(PubTatorAPI.BASE_URL, '%s/Receive' % sess_id))
+			res = requests.get(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, '%s/Receive' % sess_id))
 			res = {} if not res.ok or 'The Result is not ready' in res.text else res
 			time.sleep(sleep_time)
 			wait_time += sleep_time

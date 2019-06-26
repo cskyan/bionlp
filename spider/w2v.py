@@ -34,10 +34,10 @@ class GensimW2VWrapper(object):
 		try:
 			self.model = KeyedVectors.load(self.model_path, mmap=mmap)
 		except Exception as e:
-			print e
+			print(e)
 			self.model = KeyedVectors.load_word2vec_format(self.model_path, binary=True)
 			mdl_path = '%s_r.bin' % os.path.splitext(self.model_path)[0]
-			print 'Resaving the model to %s in Gensim format...' % mdl_path
+			print('Resaving the model to %s in Gensim format...' % mdl_path)
 			self.model.save(mdl_path)
 
 	def get_vocab(self):
@@ -49,7 +49,7 @@ class GensimW2VWrapper(object):
 		try:
 			idx = self.model.vocab[word.lower()].index
 		except KeyError as e:
-			print '\'%s\' is not in the vocabulary!' % nlp.clean_txt(word)
+			print('\'%s\' is not in the vocabulary!' % nlp.clean_txt(word))
 			return inexistence
 		else:
 			return idx
@@ -126,23 +126,23 @@ class SolrIterable(object):
 		def _doc():
 			pool = None
 			for offset in range(self.offset, num_doc, self.interval):
-				sub_interval = self.interval / self.n_jobs
+				sub_interval = int(self.interval / self.n_jobs)
 				sub_kwargs = kwargs.copy()
 				sub_kwargs['rows'] = sub_interval
 				n_jobs = self.n_jobs
 				trial = 0 if MAX_TRIAL is None else MAX_TRIAL
 				while (MAX_TRIAL is None or trial > 0):
 					try:
-						docs, pool = njobs.run_pool(_target, n_jobs=min(MAX_CONN, n_jobs), pool=pool, ret_pool=True, dist_param=['start'], endpoint=self.endpoint, timeout=self.timeout, query=self.query, start=range(offset, offset+self.interval, sub_interval), **sub_kwargs)
+						docs, pool = njobs.run_pool(_target, n_jobs=min(MAX_CONN, n_jobs), pool=pool, ret_pool=True, dist_param=['start'], endpoint=self.endpoint, timeout=self.timeout, query=self.query, start=list(range(offset, offset+self.interval, sub_interval)), **sub_kwargs)
 						for doc in func.flatten_list(docs):
 							yield doc
 							del doc
 						break
 					except Exception as e:
-						print e
+						print(e)
 						njobs.run_pool(_target, pool=pool, ret_pool=False)
 						pool = None
-						n_jobs = max(1, n_jobs / 2)
+						n_jobs = max(1, int(n_jobs / 2))
 						time.sleep(20)
 					trial -= 1
 				else:
@@ -172,7 +172,7 @@ def _target(endpoint='', timeout=10, query='*:*', start=0, **kw_args):
 			del solr
 			break
 		except Exception as e:
-			print e
+			print(e)
 			del solr
 			time.sleep(10)
 		trial -= 1
@@ -205,7 +205,7 @@ def pubmed_w2v_solr(endpoint, query='*:*', maxnum=None, interval=20, timeout=10,
 	cache_fpath, mdl_cache_fpath = os.path.join(cache_path, 'pubmed_w2v.pkl'), os.path.join(cache_path, mdl_fname)
 	if (os.path.exists(cache_fpath) and os.path.exists(mdl_cache_fpath)):
 		cache = io.read_obj(cache_fpath)
-		model = Word2Vec.load(mdl_cache_fpath, mmap=None if os.path.getsize(mdl_cache_fpath)/1024**2 < 50 else 'r')
+		model = Word2Vec.load(mdl_cache_fpath, mmap=None if int(os.path.getsize(mdl_cache_fpath) / 1024**2) < 50 else 'r')
 		offset, vocab_built = cache['offset'], cache['vocab_built']
 	else:
 		model = Word2Vec(None, size=size, window=window, min_count=min_count, workers=n_jobs if n_jobs > 0 else psutil.cpu_count())
@@ -222,8 +222,8 @@ def pubmed_w2v_solr(endpoint, query='*:*', maxnum=None, interval=20, timeout=10,
 
 	if (vocab_built and solr_iter.done):
 		model.save(mdl_fname)
-		print 'Finish training word vector for pubmed!'
+		print('Finish training word vector for pubmed!')
 	else:
 		io.write_obj(dict(offset=solr_iter.cutoff, vocab_built=vocab_built), cache_fpath)
 		model.save(mdl_cache_fpath)
-		print 'Training is interrupted, model cache is saved in %s' % mdl_cache_fpath
+		print('Training is interrupted, model cache is saved in %s' % mdl_cache_fpath)

@@ -9,10 +9,7 @@
 ###########################################################################
 #
 
-import os
-import sys
-import time
-import subprocess
+import os, sys, time, subprocess
 # from collections import OrderedDict
 
 import pandas as pd
@@ -23,10 +20,10 @@ from ..util import fs
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp\\dnorm'
-	TMP_PATH = os.path.join(os.environ['TMPDIR'], 'dnorm') if (os.environ.has_key('TMPDIR') and os.path.exists(os.environ['TMPDIR'])) else 'D:\\data\\bionlp\\dnormtmp\\'
+	TMP_PATH = os.path.join(os.environ['TMPDIR'], 'dnorm') if ('TMPDIR' in os.environ and os.path.exists(os.environ['TMPDIR'])) else 'D:\\data\\bionlp\\dnormtmp\\'
 elif sys.platform.startswith('linux2'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp', 'dnorm')
-	TMP_PATH = os.path.join(os.environ['TMPDIR'], 'dnorm') if (os.environ.has_key('TMPDIR') and os.path.exists(os.environ['TMPDIR'])) else '/tmp/dnorm'
+	TMP_PATH = os.path.join(os.environ['TMPDIR'], 'dnorm') if ('TMPDIR' in os.environ and os.path.exists(os.environ['TMPDIR'])) else '/tmp/dnorm'
 
 DNORM_HOME = os.environ.setdefault('DNORM_HOME', 'DNorm')
 CONFIG = os.path.join(DNORM_HOME, 'config', 'banner_NCBIDisease_TEST.xml')
@@ -34,7 +31,7 @@ LEXICON= os.path.join(DNORM_HOME, 'data', 'CTD_diseases.tsv')
 MATRIX= os.path.join(DNORM_HOME, 'output', 'simmatrix_NCBIDisease_e4.bin')
 CLASS = ['dnorm.jar', 'colt.jar', 'lucene-analyzers-3.6.0.jar', 'lucene-core-3.6.0.jar', 'libs.jar', 'commons-configuration-1.6.jar', 'commons-collections-3.2.1.jar', 'commons-lang-2.4.jar', 'commons-logging-1.1.1.jar', 'banner.jar', 'dragontool.jar', 'heptag.jar', 'mallet.jar', 'mallet-deps.jar', 'trove-3.0.3.jar']
 CLASSPATH = ':'.join([os.path.join(DNORM_HOME, 'libs', jar) for jar in CLASS])
-	
+
 
 def _gen_txt_list(text):
 	index = 0
@@ -45,8 +42,8 @@ def _gen_txt_list(text):
 def _gen_txt_flat(text):
 	for i, txt in enumerate(text.split('\n')):
 		yield i, txt
-	
-	
+
+
 def annot_dss(text, keep_tmp=False):
 	fs.mkdir(TMP_PATH)
 	OUTPUT_PATH = os.path.join(TMP_PATH, 'output')
@@ -68,8 +65,8 @@ def annot_dss(text, keep_tmp=False):
 		ret_code = subprocess.check_call('java -Xmx10G -Xms10G -cp %s dnorm.RunDNorm %s %s %s %s %s' % (CLASSPATH, CONFIG, LEXICON, MATRIX, tmp_file, output_f), shell=True)
 	except Exception as e:
 		if ('ret_code' in locals()):
-			print 'Return code: %s' % ret_code
-		print e
+			print('Return code: %s' % ret_code)
+		print(e)
 	os.chdir(curdir)
 	df = pd.read_table(output_f, header=None, names=['id', 'start', 'end', 'concept', 'cid'], index_col=0)
 	if (not keep_tmp):
