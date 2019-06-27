@@ -19,7 +19,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 
 def t_sne(X, n_components=2, **kwargs):
-	from ext.tsne import tsne
+	from .ext.tsne import tsne
 	return tsne(X, no_dims=n_components, **kwargs)
 
 
@@ -29,19 +29,19 @@ class DecompTransformer(BaseEstimator, TransformerMixin):
 		self.n_components = n_components
 		self.sf_kwargs = kwargs
 
-		
+
 	def _fit(self, X, Y=None):
 		if (Y is None):
 			self.X_transformed = self.decomp_func(X, self.n_components, **self.sf_kwargs)
 		else:
 			self.X_transformed = self.decomp_func(X, Y, self.n_components, **self.sf_kwargs)
 
-	
+
 	def fit(self, X, Y=None):
 		self._fit(X, Y)
 		return self
-		
-		
+
+
 	def transform(self, X):
 		return self.X_transformed
 

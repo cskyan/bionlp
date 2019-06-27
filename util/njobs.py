@@ -34,7 +34,7 @@ def split_2d(task_grid, split_num=None, task_size=None, split_size=None, ret_idx
 	if (split_num is None):
 		if (task_size is None or split_size is None):
 			return [list(range(task_grid[0]+1)), list(range(task_grid[1]))+1] if ret_idx else [[1] * task_grid[0], [1] * task_grid[1]]
-		group_size = max(1, int(split_size, task_size))
+		group_size = max(1, int(split_size / task_size))
 		factor = (1.0 * group_size / np.product(task_grid))**0.5
 		_grid = np.array(task_grid) * factor
 		grid = _grid.round().astype('int')
