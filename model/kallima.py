@@ -53,7 +53,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 	coarse : float, optional (between 0 and 1, default 0.5)
 		The percentage threshold of distance difference when removing the inconsistent edges in mstcut method
 	rcexp : int, optional
-		The exponential coefficient e when calculating the rirc = ri * rc^e.	
+		The exponential coefficient e when calculating the rirc = ri * rc^e.
 	cond : float, optional (default 0.3)
 		The conductance threshold used to filter the merged clusters in mstcut method
 	cross_merge : bool, default=False
@@ -127,8 +127,8 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 			try:
 				nx.write_gml(G, '%s.gml' % self.mdl_name)
 			except Exception as e:
-				print 'Cannot save the NNG graph models %s!' % self.mdl_name
-				print e
+				print('Cannot save the NNG graph models %s!' % self.mdl_name)
+				print(e)
 		return self
 
 	def predict(self, X, constraint=None):
@@ -144,9 +144,9 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		'''
 		check_is_fitted(self, 'clusters_')
 		X = self._check_test_data(X)
-		
+
 		return self.labels_
-		
+
 	def fit_predict(self, X, y=None, constraint=None):
 		'''Compute cluster centers and predict cluster index for each sample.
 		----------
@@ -178,7 +178,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 	def _transform(self, X, y=None, constraint=None):
 		'''guts of transform method; no input validation'''
 		return self.labels_
-		
+
 	def _check_test_data(self, X):
 		X = check_array(X, accept_sparse="csr", order='C', dtype=[np.float64, np.float32, np.float16, np.int64, np.int32, np.int16, np.int8])
 		n_samples, n_features = X.shape
@@ -186,10 +186,10 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		if not n_features == expected_n_features:
 			raise ValueError("Incorrect number of features. Got %d features, expected %d" % (n_features, expected_n_features))
 		return X
-		
+
 	def _bicut_val(self, g, a, b):
 		return sum([g[i, j] for i, j in product(a, b)])
-		
+
 	def _cut_val(self, g, clusters, method='mincut'):
 		vset = set(range(g.shape[0]))
 		if (all(isinstance(clt, set) for clt in clusters)):
@@ -200,12 +200,12 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		# print clt_sets
 		# print cmp_clt_sets
 		if (method == 'normcut'):
-			return 0.5 * sum([self._bicut_val(g, clt, cmpclt) / (g[list(clt),:].sum() - g.diagonal()[list(clt)].sum()) for clt, cmpclt in zip(clt_sets, cmp_clt_sets)])
+			return 0.5 * sum([int(self._bicut_val(g, clt, cmpclt) / (g[list(clt),:].sum() - g.diagonal()[list(clt)].sum())) for clt, cmpclt in zip(clt_sets, cmp_clt_sets)])
 		elif (method == 'ratiocut'):
-			return 0.5 * sum([self._bicut_val(g, clt, cmpclt) / len(clt) for clt, cmpclt in zip(clt_sets, cmp_clt_sets)])
+			return 0.5 * sum([int(self._bicut_val(g, clt, cmpclt) / len(clt)) for clt, cmpclt in zip(clt_sets, cmp_clt_sets)])
 		else:
 			return 0.5 * sum([self._bicut_val(g, clt, cmpclt) for clt, cmpclt in zip(clt_sets, cmp_clt_sets)])
-			
+
 	def _rirc(self, g, clusters):
 		'''Relative Inter-connectivity and Relative Closeness'''
 		clt_num = len(clusters)
@@ -221,21 +221,21 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 			union_clt = np.array(list(clt_sets[i]) + list(clt_sets[j]))
 			union_clt_size = clt_size[i] + clt_size[j]
 			sub_graph = g[union_clt,:][:,union_clt]
-			mutual_edge_cut[(i,j)] = self._cut_val(sub_graph, [range(clt_size[i])], method='mincut')
+			mutual_edge_cut[(i,j)] = self._cut_val(sub_graph, [list(range(clt_size[i]))], method='mincut')
 			# Relative inter-connectivity
 			if (edge_cut[i] == 0 or edge_cut[j] == 0):
 				ri[i, j] = ri[j, i] = rc[i, j] = rc[j, i] = 0
 				continue
 			ri[i, j] = ri[j, i] = 2.0 * abs(mutual_edge_cut[(i,j)]) / (abs(edge_cut[i]) + abs(edge_cut[j]))
 			# Relative closeness
-			mutual_edge_num = find(sub_graph[range(clt_size[i]),:][:,range(clt_size[i],union_clt_size)])[0].shape[0]
+			mutual_edge_num = find(sub_graph[list(range(clt_size[i])),:][:,list(range(clt_size[i],union_clt_size))])[0].shape[0]
 			bicut_edge_num = find(g[clt_arrays[i],:])[0].shape[0], find(g[clt_arrays[j],:])[0].shape[0]
 			if (mutual_edge_num == 0 or bicut_edge_num[0] == 0 or bicut_edge_num[1] == 0):
 				rc[i, j] = rc[j, i] = 0
 			else:
-				rc[i, j] = rc[j, i] = (mutual_edge_cut[(i,j)] / mutual_edge_num) / (1.0 * clt_size[i] / union_clt_size * edge_cut[i] / bicut_edge_num[0] + 1.0 * clt_size[j] / union_clt_size * edge_cut[j] / bicut_edge_num[1])
+				rc[i, j] = rc[j, i] = int((int(mutual_edge_cut[(i,j)] / mutual_edge_num)) / (1.0 * clt_size[i] / union_clt_size * edge_cut[i] / bicut_edge_num[0] + 1.0 * clt_size[j] / union_clt_size * edge_cut[j] / bicut_edge_num[1]))
 		return ri * rc ** self.rcexp, edge_cut, mutual_edge_cut
-		
+
 	def _node_pair_gen(self, leaf_sets, g=[], leaf_clt=[]):
 		leaf_ids = [x['id'] for x in leaf_sets]
 		clt_sets = [func.flatten_list([leaf_clt[id] for id in ids]) for ids in leaf_ids]
@@ -246,13 +246,13 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		rirc, ec, mec = self._rirc(g, clt_sets)
 		ec = [self._cut_val(g, [clt], method='mincut') for clt in clt_sets]
 		# Calculate the conductance
-		for i in xrange(len(leaf_sets)):
+		for i in range(len(leaf_sets)):
 			leaf_sets[i]['data']['cond'] = 2.0 * ec[i] / min(g[clt_arrays[i],:][:,clt_arrays[i]].sum(), g[cmp_clt_arrays[i],:][:,cmp_clt_arrays[i]].sum())
 		# Generate pairwise cluster sets
 		generated = set([])
 		while (rirc.max() > 0 and len(generated) < len(clt_sets)):
 			max_idx = rirc.argmax()
-			max_pos = (max_idx / rirc.shape[1], max_idx % rirc.shape[1])
+			max_pos = (int(max_idx, rirc.shape[1]) / max_idx % rirc.shape[1])
 			if (max_pos[0] == max_pos[1]):
 				# Odd number of clusters
 				yield (max_pos[0],), dict(cond=0)
@@ -268,7 +268,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 					yield (remain_cltsets[cltidx_pair[0][0]], remain_cltsets[cltidx_pair[0][1]]), dict(cond=0)
 				else:
 					yield (remain_cltsets[cltidx_pair[0][0]],), dict(cond=0)
-			
+
 	def _tree_clt(self, node):
 		if (node == None):
 			return []
@@ -277,7 +277,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		clusters.extend(self._tree_clt(node.right))
 		clusters.extend([node.value])
 		return clusters
-		
+
 	def _conductance(self, g, vset, clt):
 		clt_array, cmp_clt_array = np.array(clt), np.array(list(vset - set(clt)))
 		edge_cut = self._cut_val(g, [clt], method='mincut')
@@ -290,7 +290,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		elif (cmpe_sum == 0):
 			return 2.0 * edge_cut / e_sum
 		return 2.0 * edge_cut / min(e_sum, cmpe_sum)
-		
+
 	def _cross_merge(self, node, g, vset):
 		merged_nodes = []
 		if (node.left != None):
@@ -334,8 +334,8 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		cut_idx, g, presrv_e, hrc_clusters = sorted_data.shape[0], coo_MST, dict(row=np.array([], dtype=np.int64), col=np.array([], dtype=np.int64), data=np.array([], dtype=np.float64)), {}
 		hist, bin_edges = np.histogram(sorted_data, bins='rice')
 		weird_val_idx = len(hist) - 1 - np.abs(hist[-1:0:-1] - hist[-2::-1]).argmax()
-		cut_val = sorted_data[np.searchsorted(sorted_data, (bin_edges[weird_val_idx] + bin_edges[weird_val_idx + 1]) / 2)]
-		for cut_thrshd in np.linspace(cut_val, bin_edges[weird_val_idx], num=(cut_val-bin_edges[weird_val_idx])/self.cut_step, endpoint=False):
+		cut_val = sorted_data[np.searchsorted(sorted_data, int((bin_edges[weird_val_idx] + bin_edges[weird_val_idx + 1]) / 2))]
+		for cut_thrshd in np.linspace(cut_val, bin_edges[weird_val_idx], num=int((cut_val-bin_edges[weird_val_idx]) / self.cut_step), endpoint=False):
 			# print cut_thrshd
 			# Find out the edges that connect to the leaves
 			out_degree, in_degree = Counter(np.append(sorted_row[:cut_idx], presrv_e['row'])), Counter(np.append(sorted_col[:cut_idx], presrv_e['col']))
@@ -366,23 +366,23 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		# print minimum_ew
 		#####
 		stat_coarse = []
-		for i in xrange(dok_MST.shape[0]):
-			for j in xrange(csr_MST.indptr[i], csr_MST.indptr[i+1]):
+		for i in range(dok_MST.shape[0]):
+			for j in range(csr_MST.indptr[i], csr_MST.indptr[i+1]):
 				col = csr_MST.indices[j]
 				stat_coarse.append((minimum_ew[i], dok_MST[i,col]))
-			for j in xrange(csc_MST.indptr[i], csc_MST.indptr[i+1]):
+			for j in range(csc_MST.indptr[i], csc_MST.indptr[i+1]):
 				row = csc_MST.indices[j]
 				stat_coarse.append((minimum_ew[i], dok_MST[row,i]))
 		io.write_npz(np.array(stat_coarse), 'stat_coarse')
 		#####
-		for i in xrange(dok_MST.shape[0]):
-			for j in xrange(csr_MST.indptr[i], csr_MST.indptr[i+1]):
+		for i in range(dok_MST.shape[0]):
+			for j in range(csr_MST.indptr[i], csr_MST.indptr[i+1]):
 				col = csr_MST.indices[j]
-				if ((dok_MST[i,col] - minimum_ew[i]) / minimum_ew[i] > self.coarse and minimum_ew[col] < dok_MST[i,col]):
+				if (int((dok_MST[i,col] - minimum_ew[i]) / minimum_ew[i]) > self.coarse and minimum_ew[col] < dok_MST[i,col]):
 					dok_MST[i, col] = 0
-			for j in xrange(csc_MST.indptr[i], csc_MST.indptr[i+1]):
+			for j in range(csc_MST.indptr[i], csc_MST.indptr[i+1]):
 				row = csc_MST.indices[j]
-				if ((dok_MST[row,i] - minimum_ew[i]) / minimum_ew[i] > self.coarse and minimum_ew[row] < dok_MST[row,i]):
+				if (int((dok_MST[row,i] - minimum_ew[i]) / minimum_ew[i]) > self.coarse and minimum_ew[row] < dok_MST[row,i]):
 					dok_MST[row,i] = 0
 
 		# if (self.n_jobs == 1):
@@ -395,7 +395,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		clt_num, clt_lbs = connected_components(dok_MST)
 		clts = [tuple(np.where(clt_lbs==x)[0]) for x in np.unique(clt_lbs)]
 		minor_clusters = dict([(clt, 0) for clt in clts if len(clt) > 1])
-		self.minor_clts_ = minor_clts = minor_clusters.keys()
+		self.minor_clts_ = minor_clts = list(minor_clusters.keys())
 		# print minor_clts
 		## Convert the distance matrix into similarity matrix
 		SIM_NNG = NNG.copy()
@@ -410,14 +410,14 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		conn[sim_rirc > 0.5] = 1
 		num_comp, comp_lbs = connected_components(conn)
 		self.aggl_clt_ = aggl_clt = AgglomerativeClustering(connectivity=conn, affinity='precomputed' if num_comp==1 else 'euclidean', memory='/dev/shm', linkage='complete')
-		print 'dist_rirc shape: %s' % str(dist_rirc.shape)
+		print('dist_rirc shape: %s' % str(dist_rirc.shape))
 		hdf5_fpath = 'cache.h5'
 		with h5py.File(hdf5_fpath, 'w') as hf:
 			hf.create_dataset('dist_rirc', data=dist_rirc)
 		dist_rirc = HDF5Matrix(hdf5_fpath, 'dist_rirc')
 		aggl_clt.fit(dist_rirc)
 		vset, all_clts, cand_clts, all_conds, conds, filtered = set(range(SIM_NNG.shape[0])), minor_clts[:], minor_clts[:], [10]*len(minor_clts), [10]*len(minor_clts), [False for x in minor_clts]
-		
+
 		stat_cond = []
 		for l, r in aggl_clt.children_:
 			merged_clt = all_clts[l] + all_clts[r]
@@ -446,7 +446,7 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 			# cluster_list, candclt_list, cond_list, candcond_list, filter_masks = njobs.run_pool(_merge_clt, n_jobs=self.n_jobs, dist_param=['clt_idx_pairs'], clt_idx_pairs=[idx_pairs[task_bnd[i]:task_bnd[i+1]] for i in range(self.n_jobs)], simg=SIM_NNG, vert_set=vset, cluster_list=all_clts, cond_thrshld=self.cond, cutv_func=_cut_val, cond_func=_conductance)
 			# for l_all, l in zip([all_clts, cand_clts, all_conds, conds, filtered], [cluster_list, candclt_list, cond_list, candcond_list, filter_masks]):
 				# l_all.extend(func.flatten_list(l))
-		
+
 		## Save the hierarchical tree
 		children_list = [[]] * len(minor_clts) + aggl_clt.children_.tolist()
 		parent_list = [-1 for x in range(len(children_list))]
@@ -458,8 +458,8 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 		try:
 			clt_tree = bintree.from_childlist(node_list, order='bottom_up', node_type='ete')
 		except Exception as e:
-			print e
-			print 'Cannot save the hierarchical tree as ETE format, use binary tree instead!'
+			print(e)
+			print('Cannot save the hierarchical tree as ETE format, use binary tree instead!')
 			clt_tree = bintree.from_childlist(node_list, order='bottom_up')
 		io.write_obj(clt_tree, '%s_hrc_tree.pkl' % self.mdl_name)
 		## Cross merge clusters over the hierarchical tree
@@ -486,17 +486,17 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 			try:
 				nx.write_gml(G, '%s_mst.gml' % self.mdl_name)
 			except Exception as e:
-				print 'Cannot save the MST graph model %s!' % self.mdl_name
-				print e
+				print('Cannot save the MST graph model %s!' % self.mdl_name)
+				print(e)
 		return clusters
-		
+
 	def _cut_tree(self, NNG):
 		pass
 
-		
+
 # def _bicut_val(g, a, b):
-	# return sum([g[i, j] for i, j in product(a, b)])		
-		
+	# return sum([g[i, j] for i, j in product(a, b)])
+
 # def _cut_val(g, clusters, method='mincut'):
 	# vset = set(range(g.shape[0]))
 	# if (all(isinstance(clt, set) for clt in clusters)):
@@ -524,19 +524,19 @@ class Kallima(BaseEstimator, ClusterMixin, TransformerMixin):
 			# return 2.0 * edge_cut / cmpe_sum
 	# elif (cmpe_sum == 0):
 		# return 2.0 * edge_cut / e_sum
-	# return 2.0 * edge_cut / min(e_sum, cmpe_sum)		
-		
+	# return 2.0 * edge_cut / min(e_sum, cmpe_sum)
+
 def _cut_edges(indices, dok_mt, csr_mt, csc_mt, min_ew, coarse):
 	for i in indices:
-		for j in xrange(csr_mt.indptr[i], csr_mt.indptr[i+1]):
+		for j in range(csr_mt.indptr[i], csr_mt.indptr[i+1]):
 			col = csr_mt.indices[j]
-			if ((dok_mt[i,col] - min_ew[i]) / min_ew[i] > coarse and min_ew[col] < dok_mt[i,col]):
+			if (int((dok_mt[i,col] - min_ew[i]) / min_ew[i]) > coarse and min_ew[col] < dok_mt[i,col]):
 				dok_mt[i, col] = 0
-		for j in xrange(csc_mt.indptr[i], csc_mt.indptr[i+1]):
+		for j in range(csc_mt.indptr[i], csc_mt.indptr[i+1]):
 			row = csc_mt.indices[j]
-			if ((dok_mt[row,i] - min_ew[i]) / min_ew[i] > coarse and min_ew[row] < dok_mt[row,i]):
+			if (int((dok_mt[row,i] - min_ew[i]) / min_ew[i]) > coarse and min_ew[row] < dok_mt[row,i]):
 				dok_mt[row,i] = 0
-				
+
 # def _merge_clt(clt_idx_pairs, simg, vert_set, cluster_list, cond_thrshld, cutv_func, cond_func):
 	# clt_list, candclt_list, cond_list, candcond_list, filter_masks = [[] for i in range(5)]
 	# for l, r in clt_idx_pairs:

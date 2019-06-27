@@ -61,7 +61,7 @@ class FZCMeans(KMeans):
 		self.pred_labels_ = self.labels_ = self.pred_u_.argmax(axis=1)
 		if (fuzzy): return self.pred_u_
 		return self.pred_labels_
-		
+
 	def fit_predict(self, X, y=None, fuzzy=False):
 		'''Compute cluster centers and predict cluster index for each sample.
 		----------
@@ -95,8 +95,8 @@ class FZCMeans(KMeans):
 	def _transform(self, X):
 		'''guts of transform method; no input validation'''
 		return super(FZCMeans, self)._transform(X) * self.fit_u_**self.m
-		
-		
+
+
 class CNSFZCMeans(FZCMeans):
 	def __init__(self, n_clusters=8, metric='manhattan', m=2, a=0.5, max_iter=300, error=0.005, init=None, random_state=None, n_jobs=1):
 		self.n_clusters = n_clusters
@@ -108,14 +108,14 @@ class CNSFZCMeans(FZCMeans):
 		self.init = init
 		self.random_state = random_state
 		self.n_jobs = n_jobs
-		
+
 
 	def fit(self, X, y=None, constraint=None):
 		cns_distance = dstclc.cns_dist(X, C=constraint, metric=self.metric, a=self.a, n_jobs=self.n_jobs)
 		_cmeans._distance = dstclc.infer_pdist(D=cns_distance, metric=self.metric, transpose=True, n_jobs=self.n_jobs)
 		return super(CNSFZCMeans, self).fit(X, y)
-		
-		
+
+
 	def fit_predict(self, X, y=None, fuzzy=False, constraint=None):
 		self.fit(X, y=y, constraint=constraint)
 		if (fuzzy): return self.fit_u_
