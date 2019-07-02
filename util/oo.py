@@ -24,9 +24,9 @@ class Singleton(type):
 class Duplicate(object):
     def __init__(self, obj, include_func=True, include_private=False):
         d = obj if type(obj) is dict else obj.__dict__
-    	for k, v in d.items():
-    		if ((callable(v) and not include_func) or (k.startswith('_') and not include_private)): continue
-    		setattr(self, k, v)
+        for k, v in d.items():
+        	if ((callable(v) and not include_func) or (k.startswith('_') and not include_private)): continue
+        	setattr(self, k, v)
 
 
 def iprofile(func):

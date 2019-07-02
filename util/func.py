@@ -153,8 +153,8 @@ def update_dict(dict1, dict2):
 
 
 def flatten_list(nested_list):
-	if not hasattr(nested_list, '__iter__') or isinstance(nested_list, basestring): return nested_list
-	l = list(itertools.chain.from_iterable(x if hasattr(x, '__iter__') and not isinstance(x, basestring) else [x] for x in nested_list))
+	if not hasattr(nested_list, '__iter__') or isinstance(nested_list, str): return nested_list
+	l = list(itertools.chain.from_iterable(x if hasattr(x, '__iter__') and not isinstance(x, str) else [x] for x in nested_list))
 	if (len(l) == 0): return []
 	if (any([type(j) is list for j in l])):
 		return flatten_list(l)
