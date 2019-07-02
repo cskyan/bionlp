@@ -19,7 +19,7 @@ from ..util import fs, cache
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp\\sparql'
-elif sys.platform.startswith('linux2'):
+elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp', 'sparql')
 SC=';;'
 

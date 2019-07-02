@@ -20,7 +20,7 @@ from ..util import fs, io, func, njobs
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp\\wordvec'
-elif sys.platform.startswith('linux2'):
+elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp', 'wordvec')
 W2V_MODEL = os.path.join('pubmed', 'wordvec.bin')
 MAX_CONN = 16

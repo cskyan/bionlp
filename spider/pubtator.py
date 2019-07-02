@@ -19,7 +19,7 @@ from ..util import fs, io, func
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'C:\\data\\bionlp'
-elif sys.platform.startswith('linux2'):
+elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 PUBTATOR_PATH = os.path.join(DATA_PATH, 'pubtator')
 

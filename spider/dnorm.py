@@ -21,7 +21,7 @@ from ..util import fs
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp\\dnorm'
 	TMP_PATH = os.path.join(os.environ['TMPDIR'], 'dnorm') if ('TMPDIR' in os.environ and os.path.exists(os.environ['TMPDIR'])) else 'D:\\data\\bionlp\\dnormtmp\\'
-elif sys.platform.startswith('linux2'):
+elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp', 'dnorm')
 	TMP_PATH = os.path.join(os.environ['TMPDIR'], 'dnorm') if ('TMPDIR' in os.environ and os.path.exists(os.environ['TMPDIR'])) else '/tmp/dnorm'
 

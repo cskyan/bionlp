@@ -20,7 +20,7 @@ from ..util import fs
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
-elif sys.platform.startswith('linux2'):
+elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 HGNC_PATH = os.path.join(DATA_PATH, 'hgnc')
 

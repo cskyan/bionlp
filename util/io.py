@@ -249,7 +249,7 @@ def cfg_reader(fpath):
 
 
 def lockf(flpath, wait_time=1):
-	if sys.platform.startswith('linux2'):
+	if sys.platform.startswith('linux'):
 		import fcntl
 	else:
 		return
@@ -266,7 +266,7 @@ def lockf(flpath, wait_time=1):
 	return x
 
 def unlockf(flpath):
-	if sys.platform.startswith('linux2'):
+	if sys.platform.startswith('linux'):
 		import fcntl
 	else:
 		return

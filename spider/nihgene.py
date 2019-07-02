@@ -18,7 +18,7 @@ from . import xmlextrc
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
-elif sys.platform.startswith('linux2'):
+elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 GENE_PATH = os.path.join(DATA_PATH, 'nihgene')
 BASE_URL = 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'

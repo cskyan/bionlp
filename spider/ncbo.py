@@ -20,7 +20,7 @@ import ftfy
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
-elif sys.platform.startswith('linux2'):
+elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 ANT_PATH = os.path.join(DATA_PATH, 'ncbo')
 API_KEY = '8e9d4dda-89e8-486b-811f-b96e4ef50c20'
