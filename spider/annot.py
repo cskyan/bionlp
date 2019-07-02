@@ -9,11 +9,7 @@
 ###########################################################################
 #
 
-import os
-import sys
-import json
-import bisect
-import cStringIO
+import os, sys, json, bisect
 
 import becas
 
@@ -84,13 +80,13 @@ def annotabs(pmid, retype='dict'):
 			groups.setdefault(tp, []).append(dict(src=src, ids=ids, word=word, offset=offset))
 		return groups
 
-	
+
 def exportabs(pmid, fpath='annot'):
 	content = becas.export_publication(pmid)
 	fs.write_file(content, os.path.splitext(fpath)[0] + '.xml', code='utf8')
 	return content
-	
-	
+
+
 def annotonto(text, ontog, lang='en', idns='', prdns=[], idprds={}, dominant=False, lbprds={}):
 	annotations = []
 	init_tokens, locs = nlp.tokenize(text, model='word', ret_loc=True)

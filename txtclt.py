@@ -9,8 +9,7 @@
 ###########################################################################
 #
 
-import difflib
-import itertools
+import difflib, itertools
 from time import time
 
 import numpy as np
@@ -26,8 +25,8 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, KFo
 from sklearn import metrics
 from keras.utils.io_utils import HDF5Matrix
 
-from util import io, func, plot
-import util.math as imath
+from .util import io, func, plot
+from .util import math as imath
 
 common_cfg = {}
 METRIC_NAME = {'homogeneity':'Homogeneity', 'completeness':'Completeness', 'v_measure':'V-measure', 'f_measure':'F-measure', 'purity':'Purity', 'ri':'Rand Index', 'ari':'Adjusted Rand Index', 'mi':'Mutual Information', 'ami':'Adjusted Mutual Information', 'nmi':'Normalized Mutual Information', 'fmi':'Fowlkes-Mallows Index', 'slcoef':'Silhouette Coefficient', 'chscore':'Calinski and Harabaz Score', 'time':'Elapsed Time'}
@@ -39,7 +38,7 @@ def init(plot_cfg={}, plot_common={}):
 	global common_cfg
 	if (len(plot_common) > 0):
 		common_cfg = plot_common
-		
+
 
 # Fuzzy Clustering Metrics
 def fuzzy_metrics(labels_true, labels_pred, X, r=0, beta=1, simple=True, use_gpu=False):
@@ -54,7 +53,7 @@ def fuzzy_metrics(labels_true, labels_pred, X, r=0, beta=1, simple=True, use_gpu
 			X_c, X_k = X[a_c_v > 0].T, X[a_k_v > r].T
 			PX_c = np.dot(np.dot(X_c, linalg.pinv(np.dot(X_c.T, X_c))), X_c.T)
 			PX_k = np.dot(np.dot(X_k, linalg.pinv(np.dot(X_k.T, X_k))), X_k.T)
-			
+
 			# eig_vals, eig_vecs = linalg.eig(PX_c + PX_k)
 			## Using Scipy Sparse Begin ##
 			from scipy import sparse
@@ -62,7 +61,7 @@ def fuzzy_metrics(labels_true, labels_pred, X, r=0, beta=1, simple=True, use_gpu
 			sp_PX = sparse.csr_matrix(PX_c + PX_k)
 			eig_vals, eig_vecs = eigs(sp_PX)
 			## Using Scipy Sparse End ##
-			
+
 			f = eig_vecs[:,eig_vals.argmax()]
 			H[c,k] = np.square(f - np.dot(X_c, a_c)).sum() + np.square(f - np.dot(X_k, a_k)).sum()
 	H_CK = -1 / X.shape[0] * (H * np.log(H / (H.sum(axis=0).reshape((1,-1)).repeat(labels_true.shape[1], axis=0)))).sum()
@@ -73,15 +72,15 @@ def fuzzy_metrics(labels_true, labels_pred, X, r=0, beta=1, simple=True, use_gpu
 	completeness = 1 if (H_KC == 0) else 1 - H_KC / -(H_sumc / labels_true.shape[1] * np.log(H_sumc / labels_true.shape[1])).sum()
 	vmeasure = (1 + beta) * homogeneity * completeness / (beta * homogeneity + completeness)
 	purity = H.max(axis=0).mean()
-	
+
 	comb_func = np.frompyfunc(lambda x: comb(x, 2), 1, 1)
 	b_combsum, a_combsum = comb_func(H.sum(axis=0)).sum(), comb_func(H.sum(axis=1)).sum()
 	expected_index = a_combsum * b_combsum / comb(labels_true.shape[0], 2)
 	adjusted_rand_index = (comb_func(H).sum() - expected_index) / ((a_combsum + b_combsum) / 2 - expected_index)
-	
+
 	marginals = np.outer(labels_true.sum(axis=0), labels_pred.sum(axis=0))
 	mi = stats.entropy(H.reshape((-1,)), marginals.reshape((-1,))).sum()
-	
+
 	S, A, B, C = [np.zeros((labels_true.shape[0], labels_true.shape[0]), dtype='float16') for x in range(4)]
 	for i, j in itertools.combinations(range(labels_true.shape[0]), 2):
 		kld_true = stats.entropy(labels_true[i], labels_true[j])
@@ -92,15 +91,15 @@ def fuzzy_metrics(labels_true, labels_pred, X, r=0, beta=1, simple=True, use_gpu
 		C[i, j] = kld_true * (1 - kld_pred)
 	rand_index = S.sum() / (labels_true.shape[0]**2 - labels_true.shape[0])
 	fmeasure = (2 * A / (2 * A + B + C)).sum()
-	
+
 	return homogeneity, completeness, vmeasure, fmeasure, purity, rand_index, adjusted_rand_index, mi
-	
+
 
 # Benchmark
 def benchmark(pipeline, X, Y, metric='euclidean', is_fuzzy=False, is_nn=False, constraint=None, use_gpu=False):
-	print '+' * 80
-	print 'Fitting Model: '
-	print pipeline
+	print('+' * 80)
+	print('Fitting Model: ')
+	print(pipeline)
 	t0 = time()
 	if (is_nn):
 		pipeline.fit(X, Y, constraint=constraint)
@@ -108,14 +107,14 @@ def benchmark(pipeline, X, Y, metric='euclidean', is_fuzzy=False, is_nn=False, c
 	else:
 		# Extract extra parameters
 		model_param = dict(is_fuzzy=is_fuzzy, constraint=constraint)
-		kwargs = dict([(kp[0], model_param[kp[1]]) for kp in [('clt__fuzzy', 'is_fuzzy'), ('clt__constraint', 'constraint')] if model_param.has_key(kp[1]) and (isinstance(model_param[kp[1]], bool) and model_param[kp[1]] or not isinstance(model_param[kp[1]], bool) and model_param[kp[1]] is not None)])
+		kwargs = dict([(kp[0], model_param[kp[1]]) for kp in [('clt__fuzzy', 'is_fuzzy'), ('clt__constraint', 'constraint')] if kp[1] in model_param and (isinstance(model_param[kp[1]], bool) and model_param[kp[1]] or not isinstance(model_param[kp[1]], bool) and model_param[kp[1]] is not None)])
 		try:
 			pred = pipeline.fit_predict(X, **kwargs)
 		except TypeError as e:
-			print e
+			print(e)
 			pred = pipeline.fit_predict(X)
 	elapsed_time = time() - t0
-	print 'elapsed time: %0.3fs' % elapsed_time
+	print('elapsed time: %0.3fs' % elapsed_time)
 
 	# Number of clusters, ignoring noise if present
 	if (is_nn):
@@ -154,7 +153,7 @@ def benchmark(pipeline, X, Y, metric='euclidean', is_fuzzy=False, is_nn=False, c
 		print("f-measure: %0.3f" % f_measure)
 		print("rand index: %0.3f" % ri)
 		print("mutual information: %0.3f" % mi)
-		print '+' * 80 + '\n'
+		print('+' * 80 + '\n')
 		return {'homogeneity':homogeneity, 'completeness':completeness, 'v_measure':v_measure, 'f_measure':f_measure, 'purity':purity, 'ri':ri, 'ari':ari, 'mi':mi, 'time':elapsed_time, 'pred_lb':pred}
 	fmi = metrics.fowlkes_mallows_score(Y, pred)
 	print("Fowlkes-Mallows index: %0.3f" % fmi)
@@ -166,9 +165,9 @@ def benchmark(pipeline, X, Y, metric='euclidean', is_fuzzy=False, is_nn=False, c
 	print("silhouette coefficient: %0.3f" % slcoef)
 	# chscore = metrics.calinski_harabaz_score(X, pred)
 	# print("Calinski-Harabaz score: %0.3f" % chscore)
-	print '+' * 80
-	print '\n'
-	
+	print('+' * 80)
+	print('\n')
+
 	return {'homogeneity':homogeneity, 'completeness':completeness, 'v_measure':v_measure, 'fmi':fmi, 'ari':ari, 'ami':ami, 'nmi':nmi, 'slcoef':slcoef, 'chscore':0, 'time':elapsed_time, 'pred_lb':pred}
 
 
@@ -181,7 +180,7 @@ def pred_ovl(preds, pred_true=None, axis=1):
 	# Row represents feature, column represents instance
 	var_num, dim = preds.shape[0], preds.shape[1]
 	orig_idx = np.arange(var_num)
-	
+
 	if (len(preds.shape) < 2 or preds.shape[1] == 1):
 		if (pred_true is None):
 			return np.ones(shape=(1,), dtype='int')
@@ -191,7 +190,7 @@ def pred_ovl(preds, pred_true=None, axis=1):
 			return overlap_mt
 
 	# Calculate possible subsets of all the instance indices
-	subset_idx = list(imath.subset(range(dim), min_crdnl=1))
+	subset_idx = list(imath.subset(list(range(dim)), min_crdnl=1))
 	# Initialize result matrix
 	if (pred_true is None):
 		overlap_mt = np.zeros(shape=(len(subset_idx),), dtype='int')
@@ -211,19 +210,19 @@ def pred_ovl(preds, pred_true=None, axis=1):
 			overlap_mt[i,0] = orig_idx[condition].shape[0]
 			overlap_mt[i,1] = orig_idx[true_cond].shape[0]
 	return overlap_mt
-	
-	
+
+
 # Clustering
 def clustering(X, model_iter, model_param={}, cfg_param={}, global_param={}, lbid=''):
 	global common_cfg
 	FILT_NAMES, CLT_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_cltnames'], global_param['pl_names'], global_param['pl_set']
 	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else lbid
-	
+
 	# Format the data
 	if (type(X) != pd.DataFrame):
 		X = pd.DataFrame(X) if type(X) != HDF5Matrix else X
 
-	print 'Clustering is starting...'
+	print('Clustering is starting...')
 	preds = []
 	for vars in model_iter(**model_param):
 		if (global_param['comb']):
@@ -231,7 +230,7 @@ def clustering(X, model_iter, model_param={}, cfg_param={}, global_param={}, lbi
 		else:
 			clt_name, clt = [vars[x] for x in range(2)]
 			# filt_name, filter, clt_name, clt= [vars[x] for x in range(4)]
-		print '#' * 80
+		print('#' * 80)
 		# Assemble a pipeline
 		if ('filter' in locals() and filter != None):
 			model_name = '%s [Ft Filt] & %s [CLT]' % (filt_name, clt_name)
@@ -245,18 +244,18 @@ def clustering(X, model_iter, model_param={}, cfg_param={}, global_param={}, lbi
 		if (model_name in PL_SET): continue
 		PL_NAMES.append(model_name)
 		PL_SET.add(model_name)
-		print model_name
+		print(model_name)
 		# Extract extra parameters
-		kwargs = dict([(kp[0], model_param[kp[1]]) for kp in [('clt__fuzzy', 'is_fuzzy'), ('clt__constraint', 'constraint')] if model_param.has_key(kp[1]) and ((type(model_param[kp[1]]) is not bool and model_param[kp[1]] is not None) or model_param[kp[1]])])
+		kwargs = dict([(kp[0], model_param[kp[1]]) for kp in [('clt__fuzzy', 'is_fuzzy'), ('clt__constraint', 'constraint')] if kp[1] in model_param and ((type(model_param[kp[1]]) is not bool and model_param[kp[1]] is not None) or model_param[kp[1]])])
 		# Build the model
-		print '+' * 80
-		print 'Fitting Model: '
-		print pipeline
+		print('+' * 80)
+		print('Fitting Model: ')
+		print(pipeline)
 		t0 = time()
 
 		pred = pipeline.fit_predict(X, **kwargs)
 		elapsed_time = time() - t0
-		print 'elapsed time: %0.3fs' % elapsed_time
+		print('elapsed time: %0.3fs' % elapsed_time)
 		preds.append(pred)
 		if (cfg_param.setdefault('save_model', True)):
 			io.write_obj(pipeline, 'clt_%s%s.mdl' % (model_name.replace(' ', '_').lower(), lbidstr))
@@ -294,14 +293,14 @@ def clustering(X, model_iter, model_param={}, cfg_param={}, global_param={}, lbi
 		io.write_df(spmnr_pval_df, 'spmnr_pval_clt%s.npz' % lbidstr, with_idx=True)
 
 	return preds
-	
-	
+
+
 # Cross validation
 def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, split_param={}, global_param={}, lbid=''):
 	global common_cfg
 	FILT_NAMES, CLT_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_cltnames'], global_param['pl_names'], global_param['pl_set']
 	lbidstr = ('_' + str(lbid) if lbid != -1 else 'all') if lbid is not None and lbid != '' else lbid
-	
+
 	# Format the data
 	if (type(X) != pd.DataFrame):
 		X = pd.DataFrame(X)
@@ -310,14 +309,14 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 	if (len(Y.shape) == 1 or Y.shape[1] == 1):
 		Y = Y.reshape((Y.shape[0],))
 	is_fuzzy = True if (len(Y.shape) > 1 and Y.shape[1] > 1) else False
-		
-	print 'Benchmark is starting...'
+
+	print('Benchmark is starting...')
 	if (kfold == 1):
 		kf = [(np.arange(X.shape[0]), np.array([]))]
 	elif (len(split_param) == 0):
 		kf = list(KFold(n_splits=kfold, shuffle=True, random_state=0).split(X, Y))
 	else:
-		if (split_param.has_key('train_size') and split_param.has_key('test_size')):
+		if ('train_size' in split_param and 'test_size' in split_param):
 			kf = list(StratifiedShuffleSplit(n_splits=kfold, train_size=split_param['train_size'], test_size=split_param['test_size'], random_state=0).split(X, Y))
 		else:
 			kf = list(StratifiedKFold(n_splits=kfold, shuffle=split_param.setdefault('shuffle', True), random_state=0).split(X, Y))
@@ -325,7 +324,7 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 	for i, (train_idx, test_idx) in enumerate(kf):
 		del PL_NAMES[:]
 		PL_SET.clear()
-		print '\n' + '-' * 80 + '\n' + '%s time validation' % imath.ordinal(i+1) + '\n' + '-' * 80 + '\n'
+		print('\n' + '-' * 80 + '\n' + '%s time validation' % imath.ordinal(i+1) + '\n' + '-' * 80 + '\n')
 		sub_X = X.iloc[train_idx,:].as_matrix()
 		sub_Y = Y[train_idx]
 		sub_idx_df = pd.DataFrame(np.arange(sub_X.shape[0]), index=X.index[train_idx])
@@ -338,7 +337,7 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 			else:
 				clt_name, clt = [vars[x] for x in range(2)]
 				# filt_name, filter, clt_name, clt= [vars[x] for x in range(4)]
-			print '#' * 80
+			print('#' * 80)
 			# Assemble a pipeline
 			if ('filter' in locals() and filter != None):
 				model_name = '%s [Ft Filt] & %s [CLT]' % (filt_name, clt_name)
@@ -355,14 +354,14 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 			if (model_name in PL_SET): continue
 			PL_NAMES.append(model_name)
 			PL_SET.add(model_name)
-			print model_name
+			print(model_name)
 			# Benchmark results
 			bm_results = benchmark(pipeline, sub_X, sub_Y, **{k:model_param[k] for k in model_param.keys() if k in ['metric', 'is_fuzzy', 'is_nn', 'constraint', 'use_gpu']})
-			results.append([bm_results[x] for x in ['homogeneity', 'completeness', 'v_measure', 'f_measure', 'purity', 'ri', 'ari', 'mi', 'ami', 'nmi', 'fmi', 'slcoef', 'chscore', 'time'] if bm_results.has_key(x)])
+			results.append([bm_results[x] for x in ['homogeneity', 'completeness', 'v_measure', 'f_measure', 'purity', 'ri', 'ari', 'mi', 'ami', 'nmi', 'fmi', 'slcoef', 'chscore', 'time'] if x in bm_results])
 			preds.append(bm_results['pred_lb'])
 			if (cfg_param.setdefault('save_crsval_pred', False)):
 				io.write_npz(dict(pred_lb=bm_results['pred_lb'], true_lb=sub_Y), 'clt_pred_crsval_%s_%s%s' % (i, model_name.replace(' ', '_').lower(), lbidstr))
-			print '\n'
+			print('\n')
 		# Cross validation results
 		crsval_results.append(results)
 		# Prediction overlap
@@ -380,11 +379,11 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 		# Spearman's rank correlation
 		crsval_spearman.append(stats.spearmanr(tpreds_mt))
 		# Kendall rank correlation
-#		crsval_kendalltau.append(stats.kendalltau(preds_mt)[0]) 
+#		crsval_kendalltau.append(stats.kendalltau(preds_mt)[0])
 		# Pearson correlation
 #		crsval_pearson.append(stats.pearsonr(preds_mt)[0])
 		del sub_X, sub_Y
-		print '\n'
+		print('\n')
 	perf_avg = np.array(crsval_results).mean(axis=0)
 	perf_std = np.array(crsval_results).std(axis=0)
 	povl_avg = np.array(crsval_povl).mean(axis=0).round()
@@ -392,9 +391,9 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 	spmnr_pval = np.array([crsp[1] for crsp in crsval_spearman]).mean(axis=0)
 #	kndtr_avg = np.array(crsval_kendalltau).mean(axis=0)
 #	prsnr_avg = np.array(crsval_pearson).mean(axis=0)
-	
+
 	## Save performance data
-	metric_idx = [METRIC_NAME[x] for x in ['homogeneity', 'completeness', 'v_measure', 'f_measure', 'purity', 'ri', 'ari', 'mi', 'ami', 'nmi', 'fmi', 'slcoef', 'chscore', 'time'] if bm_results.has_key(x)]
+	metric_idx = [METRIC_NAME[x] for x in ['homogeneity', 'completeness', 'v_measure', 'f_measure', 'purity', 'ri', 'ari', 'mi', 'ami', 'nmi', 'fmi', 'slcoef', 'chscore', 'time'] if x in bm_results]
 	# metric_idx = ['Homogeneity', 'Completeness', 'V-measure', 'Fowlkes-Mallows Index', 'Adjusted Rand Index', 'Adjusted Mutual Information', 'Normalized Mutual Information', 'Silhouette Coefficient', 'Calinski and Harabaz Score', 'Elapsed Time']
 	perf_avg_df = pd.DataFrame(perf_avg.T, index=metric_idx, columns=PL_NAMES)
 	perf_std_df = pd.DataFrame(perf_std.T, index=metric_idx, columns=PL_NAMES)
@@ -422,7 +421,7 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 		spmnr_pval_df.to_excel('spmnr_pval_clt%s.xlsx' % lbidstr)
 	if (cfg_param.setdefault('save_spmnr_pval_npz', False)):
 		io.write_df(spmnr_pval_df, 'spmnr_pval_clt%s.npz' % lbidstr, with_idx=True)
-	
+
 	## Plot figures
 	group_dict = {}
 	for i, pl in enumerate(PL_NAMES):
@@ -446,7 +445,7 @@ def cross_validate(X, Y, model_iter, model_param={}, kfold=5, cfg_param={}, spli
 				mtrc_std = perf_std_df.ix[mtrc,:].as_matrix().reshape((1,-1))
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=PL_NAMES, labels=None, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clt_ft' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)
 			else:
-				for i in xrange(filt_num):
+				for i in range(filt_num):
 					offset = i * clt_num
 					mtrc_avg_list.append(perf_avg_df.ix[mtrc,offset:offset+clt_num].as_matrix().reshape((1,-1)))
 					mtrc_std_list.append(perf_std_df.ix[mtrc,offset:offset+clt_num].as_matrix().reshape((1,-1)))
@@ -468,7 +467,7 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, n_jobs=-1):
 	if (rdtune):
 		param_grid = {}
 		for p_option in grid.cv_results_['params']:
-			for p_name, p_val in p_option.iteritems():
+			for p_name, p_val in p_option.items():
 				param_grid.setdefault(p_name, []).append(p_val)
 	else:
 		param_grid = grid.param_grid
@@ -486,13 +485,13 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, n_jobs=-1):
 	# Fill in the data cube
 	for i, p_option in enumerate(grid.cv_results_['params']):
 		idx = np.zeros((len(dim_names),), dtype='int')
-		for k, v in p_option.iteritems():
+		for k, v in p_option.items():
 			idx[dim_names[k]] = dim_vals[k][v]
 		score_avg_cube[tuple(idx)] = score_avg_list[i]
 		score_std_cube[tuple(idx)] = score_std_list[i]
 	return grid.best_params_, grid.best_score_, score_avg_cube, score_std_cube, dim_names, dim_vals
-	
-	
+
+
 # Cluster filtering
 def filt_clt(X, Y, method='std', **kwargs):
 	Y = np.copy(Y)
@@ -512,8 +511,8 @@ def filt_clt_std(X, Y, threshold=0.2):
 	for fo in filtout:
 		np.place(Y, Y==fo, -1)
 	return Y
-	
-	
+
+
 class DummyCluster(BaseEstimator, ClusterMixin, TransformerMixin):
 	def __init__(self, output=None, **kwargs):
 		self.output_ = io.read_npz(output)['pred_lb']

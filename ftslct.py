@@ -9,8 +9,7 @@
 ###########################################################################
 #
 
-import os
-import sys
+import os, sys
 
 import numpy as np
 import scipy as sp
@@ -19,23 +18,23 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.feature_selection import SelectKBest
 
-from util import io
-	
-	
+from .util import io
+
+
 def cooc_mt(X, Y):
 	nX, nY = 1 - X, 1 - Y
 	coocrnc, nxny_coocrnc = np.dot(Y.T, X), np.dot(nY.T, nX)
 	nx_coocrnc, ny_coocrnc = np.dot(Y.T, nX), np.dot(nY.T, X)
 	return coocrnc, nxny_coocrnc, nx_coocrnc, ny_coocrnc
-	
-	
+
+
 def cooc_stat(X, Y, coocrnc):
 	coocrnc_avg = coocrnc / Y.sum(axis=0).reshape((-1,1)).repeat(X.shape[1], axis=1)
 	xy = X.reshape((X.shape[0], 1, X.shape[1])).repeat(Y.shape[1], axis=1) * Y.reshape((Y.shape[0], Y.shape[1], 1)).repeat(X.shape[1], axis=2)
 	coocrnc_std = np.sqrt(np.square(xy - coocrnc_avg.reshape((1, coocrnc_avg.shape[0], coocrnc_avg.shape[1])).repeat(xy.shape[0], axis=0)).mean(axis=0))
 	return coocrnc_avg, coocrnc_std
-	
-	
+
+
 def gu_metric(X, Y, scaled=True):
 	coocrnc, nxny_coocrnc, nx_coocrnc, ny_coocrnc = cooc_mt(X, Y)
 	y_sum, ny_sum = coocrnc + nx_coocrnc, ny_coocrnc + nxny_coocrnc
@@ -48,7 +47,7 @@ def gu_metric(X, Y, scaled=True):
 	else:
 		return np.nan_to_num(gu), np.zeros_like(gu)
 
-	
+
 def fisher_crtrn(X, Y, scaled=True):
 	coocrnc, nxny_coocrnc, nx_coocrnc, ny_coocrnc = cooc_mt(X, Y)
 	coocrnc_avg, coocrnc_std = cooc_stat(X, Y, coocrnc)
@@ -59,15 +58,15 @@ def fisher_crtrn(X, Y, scaled=True):
 		return mms.fit_transform(np.nan_to_num(fc).reshape((-1,1))).ravel(), np.zeros_like(fc)
 	else:
 		return np.nan_to_num(fc), np.zeros_like(fc)
-	
-	
+
+
 def odds_ratio(X, Y, scaled=True):
 	# nY = 1 - Y
 	# y_freqs, ny_freqs = Y.sum(axis=0), nY.sum(axis=0)
 	# cond_freqs, ncond_freqs = np.dot(Y.T, X), np.dot(nY.T, X)
 	# cond_prob, ncond_prob = 1.0 * cond_freqs / y_freqs.reshape((-1,1)).repeat(cond_freqs.shape[1], axis=1), 1.0 * ncond_freqs / ny_freqs.reshape((-1,1)).repeat(ncond_freqs.shape[1], axis=1)
 	# or_sum = ((cond_prob * (1 - ncond_prob)) / ((1 - cond_prob) * ncond_prob)).sum(axis=0)
-	
+
 	coocrnc, nxny_coocrnc, nx_coocrnc, ny_coocrnc = cooc_mt(X, Y)
 	or_sum = (1.0 * (coocrnc * nxny_coocrnc) / (nx_coocrnc * ny_coocrnc)).sum(axis=0)
 	if (scaled):
@@ -75,8 +74,8 @@ def odds_ratio(X, Y, scaled=True):
 		return mms.fit_transform(np.nan_to_num(or_sum).reshape((-1,1))).ravel(), np.zeros_like(or_sum)
 	else:
 		return np.nan_to_num(or_sum), np.zeros_like(or_sum)
-	
-	
+
+
 def ngl_coef(X, Y, scaled=True):
 	# nX, nY = 1 - X, 1 - Y
 	# x_freqs, y_freqs = X.sum(axis=0), Y.sum(axis=0)
@@ -95,14 +94,14 @@ def ngl_coef(X, Y, scaled=True):
 		return mms.fit_transform(np.nan_to_num(ngl).reshape((-1,1))).ravel(), np.zeros_like(ngl)
 	else:
 		return np.nan_to_num(ngl), np.zeros_like(ngl)
-	
-	
+
+
 def gss_coef(X, Y, scaled=True):
 	# nX, nY = 1 - X, 1 - Y
 	# joint_prob, nxny_joint_prob = 1.0 * np.dot(Y.T, X) / X.shape[0], 1.0 * np.dot(nY.T, nX) / X.shape[0]
 	# nx_joint_prob, ny_joint_prob = 1.0 * np.dot(Y.T, nX) / X.shape[0], 1.0 * np.dot(nY.T, X) / X.shape[0]
 	# gss = (joint_prob * nxny_joint_prob - nx_joint_prob * ny_joint_prob).sum(axis=0)
-	
+
 	coocrnc, nxny_coocrnc, nx_coocrnc, ny_coocrnc = cooc_mt(X, Y)
 	gss = (coocrnc * nxny_coocrnc - nx_coocrnc * ny_coocrnc).sum(axis=0)
 	if (scaled):
@@ -111,7 +110,7 @@ def gss_coef(X, Y, scaled=True):
 	else:
 		return np.nan_to_num(gss), np.zeros_like(gss)
 
-	
+
 def info_gain(X, Y, scaled=True):
 	# x_freqs, y_freqs = X.sum(axis=0), Y.sum(axis=0)
 	# x_prob, y_prob = 1.0 * x_freqs / X.shape[0], 1.0 * y_freqs / Y.shape[0]
@@ -121,7 +120,7 @@ def info_gain(X, Y, scaled=True):
 	# joint_prob = 1.0 * np.dot(Y.T, X) / X.shape[0]
 	# njoint_prob = 1 - joint_prob
 	# ig = (joint_prob * np.log(joint_prob / (y_prob_mt * x_prob_mt)) + njoint_prob * np.log(njoint_prob / (y_prob_mt * nx_prob_mt))).sum(axis=0)
-	
+
 	coocrnc, nxny_coocrnc, nx_coocrnc, ny_coocrnc = cooc_mt(X, Y)
 	x_sum, nx_sum, y_sum, ny_sum, xor_sum = coocrnc + ny_coocrnc, nx_coocrnc + nxny_coocrnc, coocrnc + nx_coocrnc, ny_coocrnc + nxny_coocrnc, nx_coocrnc + ny_coocrnc
 	x_prob, y_prob = 1.0 * x_sum / X.shape[0], 1.0 * y_sum / X.shape[0]
@@ -134,8 +133,8 @@ def info_gain(X, Y, scaled=True):
 		return mms.fit_transform(np.nan_to_num(ig).reshape((-1,1))).ravel(), np.zeros_like(ig)
 	else:
 		return np.nan_to_num(ig), np.zeros_like(ig)
-	
-	
+
+
 def mutual_info(X, Y, scaled=True):
 	# x_freqs, y_freqs = X.sum(axis=0), Y.sum(axis=0)
 	# x_prob, y_prob = 1.0 * x_freqs / X.shape[0], 1.0 * y_freqs / Y.shape[0]
@@ -143,7 +142,7 @@ def mutual_info(X, Y, scaled=True):
 	# joint_prob = 1.0 * np.dot(Y.T, X) / X.shape[0] # P(y_j, x_i)
 	# mi = np.log(joint_prob / (y_prob_mt * x_prob_mt)).sum(axis=0)
 	# return np.nan_to_num(mi), np.zeros_like(mi)
-	
+
 	coocrnc, nxny_coocrnc, nx_coocrnc, ny_coocrnc = cooc_mt(X, Y)
 	mi = (1.0 * (coocrnc * X.shape[0]) / ((coocrnc + nx_coocrnc) * (coocrnc + ny_coocrnc))).sum(axis=0)
 	if (scaled):
@@ -152,7 +151,7 @@ def mutual_info(X, Y, scaled=True):
 	else:
 		return np.nan_to_num(mi), np.zeros_like(mi)
 
-	
+
 def freqs(X, Y, min_t=1, max_t=None, scaled=True):
 	if (max_t is None): max_t = X.shape[0]
 	mt = sp.sparse.coo_matrix(X)
@@ -168,8 +167,8 @@ def freqs(X, Y, min_t=1, max_t=None, scaled=True):
 		return mms.fit_transform(np.nan_to_num(fi).reshape((-1,1))).ravel(), np.zeros_like(fi)
 	else:
 		return np.nan_to_num(fi), np.zeros_like(fi)
-	
-	
+
+
 def decision_tree(X, Y, scaled=True):
 	from sklearn.tree import DecisionTreeClassifier
 	filter = DecisionTreeClassifier(criterion='entropy', class_weight='balanced', random_state=0)
@@ -195,19 +194,19 @@ def filtref(cur_f, ref_f, ori_f=None):
 	def func(X, y):
 		return fi, np.zeros_like(fi)
 	return func
-	
-	
+
+
 def gen_fis(X, Y, filtfunc=freqs, scaled=True, **kwargs):
 	fi_list, pval_list = [[] for i in range(2)]
 	if (len(Y.shape) == 1): Y = Y.reshape((-1, 1))
-	for i in xrange(Y.shape[1]):
+	for i in range(Y.shape[1]):
 		y = Y[:,i].reshape((-1,1))
 		fi, pval = filtfunc(X, y, scaled=scaled, **kwargs)
 		fi_list.append(fi)
 		pval_list.append(pval)
 	return np.vstack(fi_list), np.vstack(pval_list)
-	
-	
+
+
 def utopk(X, Y, filtfunc=freqs, fsw=1, fn=10, scaled=True, **kwargs):
 	fi_mt, _ = gen_fis(X, Y, filtfunc, scaled=False, **kwargs)
 	#reduce(np.union1d, fi_mt.argsort(axis=1)[:,-fn:][:,::-1])
@@ -221,32 +220,32 @@ def utopk(X, Y, filtfunc=freqs, fsw=1, fn=10, scaled=True, **kwargs):
 		return mms.fit_transform(np.nan_to_num(fi).reshape((-1,1))).ravel(), np.zeros_like(fi)
 	else:
 		return np.nan_to_num(fi), np.zeros_like(fi)
-	
-	
+
+
 def gen_ftslct_func(func, **kwargs):
 	def ftslct_func(X, Y):
 		return func(X, Y, **kwargs)
 	return ftslct_func
-	
-	
+
+
 def lasso_path(spdr):
 	import matplotlib as mpl
 	mpl.use('Agg')
 	import matplotlib.pyplot as plt
 	from sklearn import linear_model
-	
+
 	if (hasattr(opts, 'pid')):
 		pid = opts.pid
 	else:
 		pid = 0
-	print 'Process ID: %i' % pid
+	print('Process ID: %i' % pid)
 	Xs, Ys = hoc.get_mltl_npz([pid], mltlx=False)
 	if (Ys == None):
-		print 'Can not find the data file!'
+		print('Can not find the data file!')
 		sys.exit(1)
 	X = Xs[0]
 	y = Ys[0]
-	
+
 	print("Computing regularization path using the LARS ...")
 	alphas, _, coefs = linear_model.lars_path(X.as_matrix().astype('float64'), y.as_matrix().astype('float64'), method='lasso', verbose=True)
 
@@ -276,8 +275,8 @@ class MSelectKBest(SelectKBest):
 		self.scores_, self.pvalues_ = self.score_func(X, Y, **self.sf_kwargs)
 		self.scores_, self.pvalues_ = np.asarray(self.scores_), np.asarray(self.pvalues_)
 		return self
-		
-		
+
+
 class MSelectOverValue(SelectKBest):
 	def __init__(self, score_func=freqs, threshold=0, **kwargs):
 		super(MSelectOverValue, self).__init__(score_func)

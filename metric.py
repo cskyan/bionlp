@@ -9,9 +9,7 @@
 ###########################################################################
 #
 
-import os
-import operator
-import itertools
+import os, operator, itertools
 
 import numpy as np
 
@@ -36,7 +34,7 @@ def micro_roc(y_true, scores):
 	fpr, tpr, thrshd = metrics.roc_curve(y_true.ravel(), scores.ravel())
 	roc_auc = metrics.auc(fpr, tpr)
 	return fpr, tpr, roc_auc, thrshd
-	
+
 
 # Macro-average ROC curve
 def macro_roc(y_true, scores):
@@ -59,7 +57,7 @@ def macro_roc(y_true, scores):
 def list_roc(y_true, y_pred, average='micro', num_point=10):
 	if (type(y_true[0]) is not list):
 		if (type(y_pred[0]) is list):
-			print 'Formats of the ground truth and the prediction are not consistent!'
+			print('Formats of the ground truth and the prediction are not consistent!')
 			return None
 		y_true, y_pred = [y_true], [y_pred]
 	max_size, bin_labels = 0, []

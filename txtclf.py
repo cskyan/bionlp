@@ -24,8 +24,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, KFold, GridSearchCV, RandomizedSearchCV
 from sklearn import metrics
 
-from util import io, func, plot
-import util.math as imath
+from .util import io, func, plot
+from .util import math as imath
 
 common_cfg = {}
 
@@ -47,7 +47,7 @@ def get_featw(pipeline, feat_num):
 				continue
 			else:
 				cmpn = pipeline
-		elif (pipeline.named_steps.has_key(component)):
+		elif (component in pipeline.named_steps):
 			cmpn = pipeline.named_steps[component]
 		else:
 			continue
@@ -76,8 +76,8 @@ def get_featw(pipeline, feat_num):
 				feat_w[filt_feat_idx] = filt_feat_w
 				# print '*' * 80 + '\n%s\n'%feat_w + '*' * 80
 				feat_w_dict[(component, measure)] = feat_w
-				print 'FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape])
-				print 'Sample 10 Feature from %s.%s: %s' % (component, measure, feat_w[feat_w > 0][:10])
+				print('FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape]))
+				print('Sample 10 Feature from %s.%s: %s' % (component, measure, feat_w[feat_w > 0][:10]))
 				# print 'Feature Importance from %s.%s: %s' % (component, measure, feat_w)
 	return feat_w_dict, sub_feat_w
 
@@ -92,27 +92,27 @@ def get_score(pipeline, X_test, mltl=False):
 	elif (hasattr(pipeline, 'decision_function')):
 		return pipeline.decision_function(X_test)
 	else:
-		print 'Neither probability estimate nor decision function is supported in the classification model!'
+		print('Neither probability estimate nor decision function is supported in the classification model!')
 		return [0] * Y_test.shape[0]
 
 
 # Benchmark
 def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=False, average='micro'):
-	print '+' * 80
-	print 'Training Model: '
-	print pipeline
+	print('+' * 80)
+	print('Training Model: ')
+	print(pipeline)
 	t0 = time()
 	pipeline.fit(X_train, Y_train)
 	train_time = time() - t0
-	print 'train time: %0.3fs' % train_time
+	print('train time: %0.3fs' % train_time)
 
 	t0 = time()
 	orig_pred = pred = pipeline.predict(X_test)
 	orig_prob = prob = pipeline.predict_proba(X_test)
 	test_time = time() - t0
-	print '+' * 80
-	print 'Testing: '
-	print 'test time: %0.3fs' % test_time
+	print('+' * 80)
+	print('Testing: ')
+	print('test time: %0.3fs' % test_time)
 
 	is_mltl = mltl
 	if (signed):
@@ -122,42 +122,42 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 	try:
 		accuracy = metrics.accuracy_score(Y_test, pred)
 	except ValueError as e:
-		print e
+		print(e)
 		Y_test, pred = Y_test.ravel(), pred.ravel()
 		accuracy = metrics.accuracy_score(Y_test, pred)
-	print 'accuracy: %0.3f' % accuracy
+	print('accuracy: %0.3f' % accuracy)
 	if (is_mltl and average == 'all'):
 		micro_precision = metrics.precision_score(Y_test, pred, average='micro')
-		print 'micro-precision: %0.3f' % micro_precision
+		print('micro-precision: %0.3f' % micro_precision)
 		micro_recall = metrics.recall_score(Y_test, pred, average='micro')
-		print 'micro-recall: %0.3f' % micro_recall
+		print('micro-recall: %0.3f' % micro_recall)
 		micro_fscore = metrics.fbeta_score(Y_test, pred, beta=1, average='micro')
-		print 'micro-fscore: %0.3f' % micro_fscore
+		print('micro-fscore: %0.3f' % micro_fscore)
 		macro_precision = metrics.precision_score(Y_test, pred, average='macro')
-		print 'macro-precision: %0.3f' % macro_precision
+		print('macro-precision: %0.3f' % macro_precision)
 		macro_recall = metrics.recall_score(Y_test, pred, average='macro')
-		print 'macro-recall: %0.3f' % macro_recall
+		print('macro-recall: %0.3f' % macro_recall)
 		macro_fscore = metrics.fbeta_score(Y_test, pred, beta=1, average='macro')
-		print 'macro-fscore: %0.3f' % macro_fscore
+		print('macro-fscore: %0.3f' % macro_fscore)
 	else:
 		precision = metrics.precision_score(Y_test, pred, average=average if is_mltl else 'binary')
-		print 'precision: %0.3f' % precision
+		print('precision: %0.3f' % precision)
 		recall = metrics.recall_score(Y_test, pred, average=average if is_mltl else 'binary')
-		print 'recall: %0.3f' % recall
+		print('recall: %0.3f' % recall)
 		fscore = metrics.fbeta_score(Y_test, pred, beta=1, average=average if is_mltl else 'binary')
-		print 'fscore: %0.3f' % fscore
+		print('fscore: %0.3f' % fscore)
 
-	print 'classification report:'
+	print('classification report:')
 	# print metrics.classification_report(Y_test, pred)
 	metric_df = pd.DataFrame(metrics.classification_report(Y_test, pred, output_dict=True)).T[['precision', 'recall', 'f1-score', 'support']]
-	print metric_df
+	print(metric_df)
 
-	print 'confusion matrix:'
+	print('confusion matrix:')
 	if (is_mltl):
 		pass
 	else:
-		print metrics.confusion_matrix(Y_test, pred)
-	print '+' * 80
+		print(metrics.confusion_matrix(Y_test, pred))
+	print('+' * 80)
 
 	clf = pipeline.named_steps['clf'] if (type(pipeline) is Pipeline) else pipeline
 	if ((isinstance(clf, OneVsRestClassifier) and hasattr(clf.estimators_[0], 'predict_proba')) or (not isinstance(clf, OneVsRestClassifier) and hasattr(pipeline, 'predict_proba'))):
@@ -170,7 +170,7 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 	elif (hasattr(pipeline, 'decision_function')):
 		scores = pipeline.decision_function(X_test)
 	else:
-		print 'Neither probability estimate nor decision function is supported in the classification model! ROC and PRC figures will be invalid.'
+		print('Neither probability estimate nor decision function is supported in the classification model! ROC and PRC figures will be invalid.')
 		scores = [0] * Y_test.shape[0]
 
 	if (signed and (len(scores.shape) < 2 or scores.shape[1] < pred.shape[1])):
@@ -220,7 +220,7 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 #	print 'ROC:\n%s\n%s' % (roc[0], roc[1])
 #	print 'PRC:\n%s\n%s' % (prc[0], prc[1])
 
-	print 'Training and Testing X shape: %s; %s' % (', '.join(['(%s)' % ','.join([str(x) for x in X.shape]) for X in X_train]) if type(X_train) is list else '(%s)' % ','.join([str(x) for x in X_train.shape]), ', '.join(['(%s)' % ','.join([str(x) for x in X.shape]) for X in X_test]) if type(X_test) is list else '(%s)' % ','.join([str(x) for x in X_test.shape]))
+	print('Training and Testing X shape: %s; %s' % (', '.join(['(%s)' % ','.join([str(x) for x in X.shape]) for X in X_train]) if type(X_train) is list else '(%s)' % ','.join([str(x) for x in X_train.shape]), ', '.join(['(%s)' % ','.join([str(x) for x in X.shape]) for X in X_test]) if type(X_test) is list else '(%s)' % ','.join([str(x) for x in X_test.shape])))
 	feat_w_dict, sub_feat_w = [{} for i in range(2)]
 	filt_feat_idx = feature_idx = np.arange(X_train[0].shape[1] if type(X_train) is list else X_train.shape[1])
 	for component in ('featfilt', 'clf'):
@@ -229,7 +229,7 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 				continue
 			else:
 				cmpn = pipeline
-		elif (pipeline.named_steps.has_key(component)):
+		elif (component in pipeline.named_steps):
 			cmpn = pipeline.named_steps[component]
 		else:
 			continue
@@ -256,12 +256,12 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 					feat_w[filt_feat_idx][:filt_feat_w.shape[1] if len(filt_feat_w.shape) > 1 else len(filt_feat_w)] = filt_feat_w[1,:] if len(filt_feat_w.shape) > 1 else filt_feat_w
 #					print '*' * 80 + '\n%s\n'%feat_w + '*' * 80
 					feat_w_dict[(component, measure)] = feat_w
-					print 'FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape])
-					print 'Sample 10 Feature from %s.%s: %s' % (component, measure, feat_w[feat_w > 0][:10])
+					print('FI shape: (%s)' % ','.join([str(x) for x in feat_w_dict[(component, measure)].shape]))
+					print('Sample 10 Feature from %s.%s: %s' % (component, measure, feat_w[feat_w > 0][:10]))
 #					print 'Feature Importance from %s.%s: %s' % (component, measure, feat_w)
 			if (hasattr(cmpn, 'get_support')):
 				filt_feat_idx = filt_feat_idx[cmpn.get_support()]
-	print '\n'
+	print('\n')
 	if (is_mltl and average == 'all'):
 		return {'accuracy':accuracy, 'micro-precision':micro_precision, 'micro-recall':micro_recall, 'micro-fscore':micro_fscore, 'macro-precision':macro_precision, 'macro-recall':macro_recall, 'macro-fscore':macro_fscore, 'train_time':train_time, 'test_time':test_time, 'micro-roc':micro_roc, 'macro-roc':macro_roc, 'prc':prc, 'feat_w':feat_w_dict, 'sub_feat_w':sub_feat_w, 'pred_lb':orig_pred, 'metrics':metric_df}
 	else:
@@ -287,7 +287,7 @@ def pred_ovl(preds, pred_true=None, axis=1):
 			return overlap_mt
 
 	# Calculate possible subsets of all the instance indices
-	subset_idx = list(imath.subset(range(dim), min_crdnl=1))
+	subset_idx = list(imath.subset(list(range(dim)), min_crdnl=1))
 	# Initialize result matrix
 	if (pred_true is None):
 		overlap_mt = np.zeros(shape=(len(subset_idx),), dtype='int')
@@ -311,7 +311,7 @@ def pred_ovl(preds, pred_true=None, axis=1):
 
 def save_featw(features, crsval_featw, crsval_subfeatw, cfg_param={}, lbid=''):
 	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
-	for k, v in crsval_featw.iteritems():
+	for k, v in crsval_featw.items():
 		measure_str = k.replace(' ', '_').strip('_').lower()
 		feat_w_mt = np.column_stack(v)
 		mms = MinMaxScaler()
@@ -328,7 +328,7 @@ def save_featw(features, crsval_featw, crsval_subfeatw, cfg_param={}, lbid=''):
 			io.write_df(feat_w_df, 'featw%s_%s' % (lbidstr, measure_str), with_idx=True)
 		if (cfg_param.setdefault('plot_featw', False)):
 			plot.plot_bar(feat_w_avg[sorted_idx[:10]].reshape((1,-1)), feat_w_std[sorted_idx[:10]].reshape((1,-1)), features[sorted_idx[:10]], labels=None, title='Feature importances', fname='fig_featw%s_%s' % (lbidstr, measure_str), plot_cfg=common_cfg)
-	for k, v in crsval_subfeatw.iteritems():
+	for k, v in crsval_subfeatw.items():
 		measure_str = k.replace(' ', '_').strip('_').lower()
 		subfeat_w_mt = np.column_stack(v)
 		mms = MinMaxScaler()
@@ -348,7 +348,7 @@ def save_featw(features, crsval_featw, crsval_subfeatw, cfg_param={}, lbid=''):
 
 # Classification
 def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_param={}, global_param={}, lbid=''):
-	print 'Classifing...'
+	print('Classifing...')
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
 	lbidstr = ('_' + (str(lbid) if lbid != -1 else 'all')) if lbid is not None and lbid != '' else ''
@@ -376,7 +376,7 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 	Y_train_mt = Y_train.as_matrix().reshape((Y_train.shape[0],)) if (len(Y_train.shape) == 1 or Y_train.shape[1] == 1) else Y_train.as_matrix()
 	mltl=True if len(Y_train_mt.shape) > 1 and Y_train_mt.shape[1] > 1 or 2 in Y_train_mt else False
 
-	print 'Classification is starting...'
+	print('Classification is starting...')
 	preds, probs, scores = [[] for i in range(3)]
 	crsval_featw, crsval_subfeatw = [{} for i in range(2)]
 	for vars in model_iter(**model_param):
@@ -384,7 +384,7 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 			mdl_name, mdl = [vars[x] for x in range(2)]
 		else:
 			filt_name, filter, clf_name, clf= [vars[x] for x in range(4)]
-		print '#' * 80
+		print('#' * 80)
 		# Assemble a pipeline
 		if ('filter' in locals() and filter != None):
 			model_name = '%s [Ft Filt] & %s [CLF]' % (filt_name, clf_name)
@@ -398,22 +398,22 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 		if (model_name in PL_SET): continue
 		PL_NAMES.append(model_name)
 		PL_SET.add(model_name)
-		print model_name
+		print(model_name)
 		# Build the model
-		print '+' * 80
-		print 'Training Model: '
-		print pipeline
+		print('+' * 80)
+		print('Training Model: ')
+		print(pipeline)
 		t0 = time()
 		pipeline.fit(X_train, Y_train_mt)
 		train_time = time() - t0
-		print 'train time: %0.3fs' % train_time
+		print('train time: %0.3fs' % train_time)
 		t0 = time()
 		pred = pipeline.predict(X_test)
 		prob = pipeline.predict_proba(X_test)
 		test_time = time() - t0
-		print '+' * 80
-		print 'Testing: '
-		print 'test time: %0.3fs' % test_time
+		print('+' * 80)
+		print('Testing: ')
+		print('test time: %0.3fs' % test_time)
 		preds.append(pred)
 		probs.append(prob)
 		scores.append(get_score(pipeline, X_test, mltl))
@@ -431,13 +431,13 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 
 		# Feature importances
 		feat_w, sub_feat_w = get_featw(pipeline, X_train[0].shape[1] if (type(X_train) is list) else X_train.shape[1])
-		for k, v in feat_w.iteritems():
+		for k, v in feat_w.items():
 			key = '%s_%s_%s' % (model_name, k[0], k[1])
 			crsval_featw.setdefault(key, []).append(v)
-		for k, v in sub_feat_w.iteritems():
+		for k, v in sub_feat_w.items():
 			key = '%s_%s_%s' % (model_name, k[0], k[1])
 			crsval_subfeatw.setdefault(key, []).append(v)
-		print '\n'
+		print('\n')
 
 	if (len(preds) > 1):
 		# Prediction overlap
@@ -509,7 +509,7 @@ def kf2data(kf, X, Y, to_hdf=False, hdf5_fpath='crsval_dataset.h5'):
 			yield i, [HDF5Matrix(hdf5_fpath, 'X_train%i' % idx) for idx in range(len(X_train))] if (type(X_train) == list) else HDF5Matrix(hdf5_fpath, 'X_train'), [HDF5Matrix(hdf5_fpath, 'X_test%i' % idx) for idx in range(len(X_test))] if (type(X_test) == list) else HDF5Matrix(hdf5_fpath, 'X_test'), HDF5Matrix(hdf5_fpath, 'Y_train'), HDF5Matrix(hdf5_fpath, 'Y_test'), train_idx_df, test_idx_df
 			# The implementation of HDF5Matrix is not good since it keep all the hdf5 file opened, so we need to manually close them.
 			remove_hfps = []
-			for hfpath, hf in HDF5Matrix.refs.iteritems():
+			for hfpath, hf in HDF5Matrix.refs.items():
 				if (hfpath.startswith(hdf5_fpath)):
 					hf.close()
 					remove_hfps.append(hfpath)
@@ -521,7 +521,7 @@ def kf2data(kf, X, Y, to_hdf=False, hdf5_fpath='crsval_dataset.h5'):
 
 # Evaluation
 def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='micro', kfold=5, cfg_param={}, global_param={}, lbid=''):
-	print 'Evaluating...'
+	print('Evaluating...')
 	from keras.utils.io_utils import HDF5Matrix
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
@@ -560,7 +560,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 
 	is_mltl = True if len(Y_train.shape) > 1 and Y_train.shape[1] > 1 or 2 in Y_train else False
 
-	print 'Benchmark is starting...'
+	print('Benchmark is starting...')
 	mean_fpr = np.linspace(0, 1, 100)
 	mean_recall = np.linspace(0, 1, 100)
 	xdf = X_train[0] if type(X_train)==list else X_train
@@ -588,7 +588,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 			mdl_name, mdl = [vars[x] for x in range(2)]
 		else:
 			filt_name, filter, clf_name, clf= [vars[x] for x in range(4)]
-		print '#' * 80
+		print('#' * 80)
 		# Assemble a pipeline
 		if ('filter' in locals() and filter != None):
 			model_name = '%s [Ft Filt] & %s [CLF]' % (filt_name, clf_name)
@@ -602,7 +602,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 		if (model_name in PL_SET): continue
 		PL_NAMES.append(model_name)
 		PL_SET.add(model_name)
-		print model_name
+		print(model_name)
 		# Benchmark results
 
 		bm_results = benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=is_mltl, signed=global_param.setdefault('signed', True if np.where(Y_train<0)[0].shape[0]>0 else False), average=avg)
@@ -629,13 +629,13 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 		else:
 			roc_dict[model_name] = roc_dict.setdefault(model_name, 0) + np.interp(mean_fpr, bm_results['roc'][0], bm_results['roc'][1])
 		prc_dict[model_name] = prc_dict.setdefault(model_name, 0) + np.interp(mean_recall, bm_results['prc'][0], bm_results['prc'][1])
-		for k, v in bm_results['feat_w'].iteritems():
+		for k, v in bm_results['feat_w'].items():
 			key = '%s_%s_%s' % (model_name, k[0], k[1])
 			featw_data[key] = v
-		for k, v in bm_results['sub_feat_w'].iteritems():
+		for k, v in bm_results['sub_feat_w'].items():
 			key = '%s_%s_%s' % (model_name, k[0], k[1])
 			subfeatw_data[key] = v
-		print '\n'
+		print('\n')
 	# Prediction overlap
 	if (True if len(Y_train.shape) > 1 and Y_train.shape[1] > 1 else False):
 		preds_mt = np.column_stack([x.ravel() for x in preds])
@@ -684,7 +684,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 	try:
 		save_featw(xdf.columns.values if type(xdf) != HDF5Matrix else np.arange(xdf.shape[1]), featw_data, subfeatw_data, cfg_param=cfg_param, lbid=lbid)
 	except Exception as e:
-		print e
+		print(e)
 
 	## Plot figures
 	if (is_mltl and avg == 'all'):
@@ -746,7 +746,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 				mtrc_std = perf_std_df.ix[mtrc,:].as_matrix().reshape((1,-1))
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=PL_NAMES, labels=None, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clf_ft%s' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)
 			else:
-				for i in xrange(filt_num):
+				for i in range(filt_num):
 					offset = i * clf_num
 					mtrc_avg_list.append(perf_avg_df.ix[mtrc,offset:offset+clf_num].as_matrix().reshape((1,-1)))
 					mtrc_std_list.append(perf_std_df.ix[mtrc,offset:offset+clf_num].as_matrix().reshape((1,-1)))
@@ -757,7 +757,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 
 # Cross validation
 def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_param={}, split_param={}, global_param={}, lbid=''):
-	print 'Cross validating...'
+	print('Cross validating...')
 	from keras.utils.io_utils import HDF5Matrix
 	global common_cfg
 	FILT_NAMES, CLF_NAMES, PL_NAMES, PL_SET = model_param['glb_filtnames'], model_param['glb_clfnames'], global_param['pl_names'], global_param['pl_set']
@@ -781,7 +781,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 		Y_mt = Y
 	is_mltl = True if len(Y_mt.shape) > 1 and Y_mt.shape[1] > 1 or 2 in Y_mt else False
 
-	print 'Benchmark is starting...'
+	print('Benchmark is starting...')
 	mean_fpr = np.linspace(0, 1, 100)
 	mean_recall = np.linspace(0, 1, 100)
 	xdf = X[0] if type(X)==list else X
@@ -793,7 +793,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	else:
 		split_param['shuffle'] = True if type(xdf) != HDF5Matrix else False
 		# To-do: implement the split method for multi-label data
-		if (split_param.has_key('train_size') and split_param.has_key('test_size')):
+		if ('train_size' in split_param and 'test_size' in split_param):
 			kf = list(StratifiedShuffleSplit(n_splits=kfold, train_size=split_param['train_size'], test_size=split_param['test_size'], random_state=0).split(xdf, Y_mt)) if (len(Y_mt.shape) == 1) else list(StratifiedShuffleSplit(n_splits=kfold, train_size=split_param['train_size'], test_size=split_param['test_size'], random_state=0).split(xdf, Y_mt[:,0].reshape((Y_mt.shape[0],))))
 		else:
 			kf = list(StratifiedKFold(n_splits=kfold, shuffle=split_param.setdefault('shuffle', True), random_state=0).split(xdf, Y_mt)) if (len(Y_mt.shape) == 1) else list(StratifiedKFold(n_splits=kfold, shuffle=split_param.setdefault('shuffle', True), random_state=0).split(xdf, Y_mt[:,0].reshape((Y_mt.shape[0],))))
@@ -803,7 +803,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	for i, X_train, X_test, Y_train, Y_test, train_idx_df, test_idx_df in kf2data(kf, X, Y_mt, to_hdf=to_hdf, hdf5_fpath=hdf5_fpath):
 		del PL_NAMES[:]
 		PL_SET.clear()
-		print '\n' + '-' * 80 + '\n' + '%s time validation' % imath.ordinal(i+1) + '\n' + '-' * 80 + '\n'
+		print('\n' + '-' * 80 + '\n' + '%s time validation' % imath.ordinal(i+1) + '\n' + '-' * 80 + '\n')
 		if (cfg_param.setdefault('save_crsval_idx', False)):
 			io.write_df(train_idx_df, 'train_idx_crsval_%s%s.npz' % (i, lbidstr), with_idx=True)
 			io.write_df(test_idx_df, 'test_idx_crsval_%s%s.npz' % (i, lbidstr), with_idx=True)
@@ -826,7 +826,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 				mdl_name, mdl = [vars[x] for x in range(2)]
 			else:
 				filt_name, filter, clf_name, clf= [vars[x] for x in range(4)]
-			print '#' * 80
+			print('#' * 80)
 			# Assemble a pipeline
 			if ('filter' in locals() and filter != None):
 				model_name = '%s [Ft Filt] & %s [CLF]' % (filt_name, clf_name)
@@ -840,7 +840,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 			if (model_name in PL_SET): continue
 			PL_NAMES.append(model_name)
 			PL_SET.add(model_name)
-			print model_name
+			print(model_name)
 			# Benchmark results
 			bm_results = benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=is_mltl, signed=global_param.setdefault('signed', True if np.where(Y_mt<0)[0].shape[0]>0 else False), average=avg)
 			# Clear the model environment (e.g. GPU resources)
@@ -868,13 +868,13 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 			else:
 				crsval_roc[model_name] = crsval_roc.setdefault(model_name, 0) + np.interp(mean_fpr, bm_results['roc'][0], bm_results['roc'][1])
 			crsval_prc[model_name] = crsval_prc.setdefault(model_name, 0) + np.interp(mean_recall, bm_results['prc'][0], bm_results['prc'][1])
-			for k, v in bm_results['feat_w'].iteritems():
+			for k, v in bm_results['feat_w'].items():
 				key = '%s_%s_%s' % (model_name, k[0], k[1])
 				crsval_featw.setdefault(key, []).append(v)
-			for k, v in bm_results['sub_feat_w'].iteritems():
+			for k, v in bm_results['sub_feat_w'].items():
 				key = '%s_%s_%s' % (model_name, k[0], k[1])
 				crsval_subfeatw.setdefault(key, []).append(v)
-			print '\n'
+			print('\n')
 		# Cross validation results
 		crsval_results.append(results)
 		# Prediction overlap
@@ -893,7 +893,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 		# Pearson correlation
 		# crsval_pearson.append(stats.pearsonr(preds_mt))
 		del X_train, X_test, Y_train, Y_test
-		print '\n'
+		print('\n')
 	perf_avg = np.array(crsval_results).mean(axis=0)
 	perf_std = np.array(crsval_results).std(axis=0)
 	povl_avg = np.array(crsval_povl).mean(axis=0).round()
@@ -941,7 +941,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	try:
 		save_featw(xdf.columns.values if type(xdf) != HDF5Matrix else np.arange(xdf.shape[1]), crsval_featw, crsval_subfeatw, cfg_param=cfg_param, lbid=lbid)
 	except Exception as e:
-		print e
+		print(e)
 
 	## Plot figures
 	if (is_mltl and avg == 'all'):
@@ -1006,7 +1006,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 				mtrc_std = perf_std_df.ix[mtrc,:].as_matrix().reshape((1,-1))
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=PL_NAMES, labels=None, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clf_ft%s' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)
 			else:
-				for i in xrange(filt_num):
+				for i in range(filt_num):
 					offset = i * clf_num
 					mtrc_avg_list.append(perf_avg_df.ix[mtrc,offset:offset+clf_num].as_matrix().reshape((1,-1)))
 					mtrc_std_list.append(perf_std_df.ix[mtrc,offset:offset+clf_num].as_matrix().reshape((1,-1)))
@@ -1028,7 +1028,7 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_j
 	if (rdtune):
 		param_grid = {}
 		for p_option in grid.cv_results_['params']:
-			for p_name, p_val in p_option.iteritems():
+			for p_name, p_val in p_option.items():
 				param_grid.setdefault(p_name, []).append(p_val)
 	else:
 		param_grid = grid.param_grid
@@ -1046,7 +1046,7 @@ def tune_param(mdl_name, mdl, X, Y, rdtune, params, mltl=False, avg='micro', n_j
 	# Fill in the data cube
 	for i, p_option in enumerate(grid.cv_results_['params']):
 		idx = np.zeros((len(dim_names),), dtype='int')
-		for k, v in p_option.iteritems():
+		for k, v in p_option.items():
 			idx[dim_names[k]] = dim_vals[k][v]
 		score_avg_cube[tuple(idx)] = score_avg_list[i]
 		score_std_cube[tuple(idx)] = score_std_list[i]
@@ -1064,14 +1064,14 @@ def tune_param_optunity(mdl_name, mdl, X, Y, perf_func=None, scoring='f1', optfu
 		if (scoring == 'roc'):
 			preds = get_score(mdl, x_test, mltl)
 			if (mltl):
-				import metric as imetric
+				from . import metric as imetric
 				return imetric.mltl_roc(y_test, preds, average=avg)
 		else:
 			preds = mdl.predict(x_test)
 		score_func = getattr(optunity, scoring) if (hasattr(optunity, scoring)) else None
 		score_func = getattr(metrics, scoring+'_score') if (score_func is None and hasattr(metrics, scoring+'_score')) else score_func
 		if (score_func is None):
-			print 'Score function %s is not supported!' % scoring
+			print('Score function %s is not supported!' % scoring)
 			sys.exit(1)
 		return score_func(y_test, preds, average=avg)
 	perf = perf_func if callable(perf_func) else default_perf
@@ -1099,7 +1099,7 @@ def tune_param_optunity(mdl_name, mdl, X, Y, perf_func=None, scoring='f1', optfu
 	# Fill in the data cube
 	for i, p_option in cl_df[param_names].iterrows():
 		idx = np.zeros((len(dim_names),), dtype='int')
-		for k, v in p_option.iteritems():
+		for k, v in p_option.items():
 			idx[dim_names[k]] = dim_vals[k][v]
 		score_avg_cube[tuple(idx)] = score_avg_list[i]
 		score_std_cube[tuple(idx)] = score_std_list[i]
@@ -1139,7 +1139,7 @@ def tune_param_hyperopt(mdl_name, mdl, X, Y, obj_func=None, scoring='f1', solver
 	# Fill in the data cube
 	for i, p_option in tune_df[param_names].iterrows():
 	  idx = np.zeros((len(dim_names),), dtype='int')
-	  for k, v in p_option.iteritems():
+	  for k, v in p_option.items():
 	    idx[dim_names[k]] = dim_vals[k][v]
 	  score_avg_cube[tuple(idx)] = score_avg_list[i]
 	  score_std_cube[tuple(idx)] = score_std_list[i]

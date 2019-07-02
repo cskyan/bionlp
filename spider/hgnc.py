@@ -9,12 +9,8 @@
 ###########################################################################
 #
 
-import os
-import sys
-import time
-import copy
-import requests
-import StringIO
+import os, sys, time, copy, requests
+from io import StringIO
 
 import pandas as pd
 
@@ -37,7 +33,7 @@ def symbol_checker(text, match_case=False, approved_symbols=True, previous_symbo
 	data = dict(data=text, format='text', submit='submit')
 	data['case'] = 'sensitive' if match_case else 'insensitive'
 	keymap = {'Approved symbol':approved_symbols, 'Previous symbol':previous_symbols, 'Synonyms':synonyms, 'Entry withdrawn':entry_withdrawn, 'Unmatched':show_unmatched}
-	data['show_types'] = [k for k, v in keymap.iteritems() if v]
+	data['show_types'] = [k for k, v in keymap.items() if v]
 	trial = 0 if MAX_TRIAL is None else MAX_TRIAL
 	while (MAX_TRIAL is None or trial > 0):
 		res = requests.post(url=SYMBOL_URL, data=data)
@@ -46,12 +42,12 @@ def symbol_checker(text, match_case=False, approved_symbols=True, previous_symbo
 		trial -= 1
 	else:
 		raise RuntimeError('Cannot connect to the service!')
-	txt = StringIO.StringIO(res.text)
+	txt = StringIO(res.text)
 	try:
 		return pd.read_table(txt)
 	except Exception as e:
-		print e
+		print(e)
 		fname = str(int(time.time()))
 		fs.write_file(text, 'symbol_checker_%s.in' % fname, code='utf-8')
 		fs.write_file(res.text, 'symbol_checker_%s.out' % fname, code='utf-8')
-		return pd.DataFrame([])	
+		return pd.DataFrame([])

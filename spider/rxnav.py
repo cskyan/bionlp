@@ -13,12 +13,12 @@ import os
 import sys
 import copy
 import json
-import xmlextrc
 
 from apiclient import APIClient
 # from abc import ABCMeta
 
 from .. import nlp
+from . import xmlextrc
 
 
 if sys.platform.startswith('win32'):
@@ -27,7 +27,7 @@ elif sys.platform.startswith('linux2'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 RXNAV_PATH = os.path.join(DATA_PATH, 'rxnav')
 
-		
+
 class DrugBuilder():
 #	__metaclass__ = ABCMeta
 
@@ -36,7 +36,7 @@ class DrugBuilder():
 		self._tag_stack = []
 		self.name = ''
 		self.concept_group = []
-		
+
 	def start(self, tag, attrib):
 		self._tag = tag
 		self._tag_stack.append(self._tag)
@@ -44,11 +44,11 @@ class DrugBuilder():
 			self.concept_group.append({})
 		if (self._tag == 'conceptProperties'):
 			self.concept_group[-1].setdefault('property', []).append({})
-	
+
 	def end(self, tag):
 		self._tag = tag
 		self._tag_stack.pop()
-		
+
 	def data(self, data):
 		if data.isspace(): return
 		data = data.strip()
@@ -77,8 +77,8 @@ class DrugBuilder():
 
 	def build(self):
 		return {'name':self.name,'concept_group':self.concept_group}
-		
-		
+
+
 BUILDER_MAP = {'drugs':DrugBuilder}
 
 
@@ -88,7 +88,7 @@ class RxNavAPI(APIClient, object):
 	_default_param = {'drugs':dict(name=''), 'interaction':dict(rxcui='')}
 	_func_restype = {'drugs':'xml', 'interaction':'json'}
 	def __init__(self, function='drugs'):
-		if (not self._default_param.has_key(function)):
+		if (function not in self._default_param):
 			raise ValueError('The function %s is not supported!' % function)
 		# super(APIClient, self).__init__()
 		# APIClient is old-stype class
@@ -104,14 +104,14 @@ class RxNavAPI(APIClient, object):
 			try:
 				parser.feed(nlp.clean_text(response.data, encoding='utf-8', replacement=None))
 			except Exception as err:
-				print 'Can not parse the response of API call!'
+				print('Can not parse the response of API call!')
 				raise err
 			parser.close()
 			return builder.build()
 		elif (self.restype == 'json'):
 			return json.loads(nlp.clean_text(response.data, encoding='utf-8', replacement=None).replace('\\', ''))
-	
+
 	def call(self, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
-		args.update((k, v) for k, v in kwargs.iteritems() if args.has_key(k))
+		args.update((k, v) for k, v in kwargs.items() if k in args)
 		return APIClient.call(self, '/%s' % self.func_url, **args)

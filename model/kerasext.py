@@ -51,9 +51,9 @@ class BaseWrapper(KerasClassifier):
 				self.histories.append(super(BaseWrapper, self).fit(X, y, verbose=DEVICE_VARS['verbose'], **kw_args))
 				return self
 		except Exception as e:
-			print '-' * 60
+			print('-' * 60)
 			traceback.print_exc(file=sys.stderr)
-			print '-' * 60
+			print('-' * 60)
 			# print e
 	def predict(self, X, **kw_args):
 		with gen_cntxt(**self.context):
@@ -192,7 +192,7 @@ class MLClassifier(BaseWrapper):
 					# Copy from keras -- END
 				# self.attributes.extend(['train_models', 'predict_model'])
 			except Exception as e:
-				print e
+				print(e)
 		else:
 			self.mlmt = False
 			return super(MLClassifier, self).fit(X, y, **kw_args)
@@ -222,7 +222,7 @@ class MLClassifier(BaseWrapper):
 			# For MLMT Model
 			model_params = self.filter_sk_params(self.build_fn)
 			build_fn, sk_params, train_models, predict_model, histories, context = self.build_fn, self.sk_params, self.train_models, self.predict_model, self.histories, self.context
-			self.build_fn, self.sk_params, self.train_models, self.predict_model, self.context = None, {k:v for k, v in sk_params.iteritems() if k not in model_params.keys()}, None, None, {}
+			self.build_fn, self.sk_params, self.train_models, self.predict_model, self.context = None, {k:v for k, v in sk_params.items() if k not in model_params.keys()}, None, None, {}
 			io.write_obj(self, fname)
 			if (sep_arch):
 				for i, train_mdl in enumerate(train_models):
@@ -462,7 +462,7 @@ def clear_session():
 		cuda.get_current_device().reset()
 		pass
 	except Exception as e:
-		print e
+		print(e)
 
 def gen_cntxt(backend='tf', device=DEV, session=None, use_sess=True, verbose=False):
 	'''
@@ -495,7 +495,7 @@ def gen_cntxt(backend='tf', device=DEV, session=None, use_sess=True, verbose=Fal
 							sess = tf.Session(config=config)
 							break
 						except Exception as e:
-							print e
+							print(e)
 							time.sleep(5)
 					# DEVICE_VARS['sess'] = sess
 				self.sess = sess

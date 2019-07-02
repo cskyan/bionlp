@@ -9,11 +9,7 @@
 ###########################################################################
 #
 
-import os
-import re
-import sys
-import logging
-import itertools
+import os, re, sys, logging, itertools
 from operator import itemgetter
 from optparse import OptionParser
 
@@ -26,8 +22,7 @@ from rdflib.plugins.sparql import prepareQuery as rprepareq
 
 from ..spider.sparql import SPARQL
 from .. import nlp
-import fs
-import func
+from . import fs, func
 
 
 if sys.platform.startswith('win32'):
@@ -58,22 +53,22 @@ opts, args = {}, []
 
 
 def replace_invalid_sparql_str(text, replacement=''):
-	return re.sub(r'^\+|[?|$|!|#]', replacement, nlp.clean_txt(unicode(text))).strip()
-	
-	
+	return re.sub(r'^\+|[?|$|!|#]', replacement, nlp.clean_txt(str(text))).strip()
+
+
 def replace_invalid_str(text, replacement=''):
-	return re.sub(r'^\+|[\(|\)|\[|\]|?|$|!|#]', replacement, nlp.clean_txt(unicode(text))).strip()
-	
+	return re.sub(r'^\+|[\(|\)|\[|\]|?|$|!|#]', replacement, nlp.clean_txt(str(text))).strip()
+
 
 def clean_result(db):
 	if (db == 'dgnet'):
 		def clean_dgnet(text, replacement=''):
-			return re.sub(r'\[.*\]', replacement, nlp.clean_txt(unicode(text))).strip()
+			return re.sub(r'\[.*\]', replacement, nlp.clean_txt(str(text))).strip()
 		return clean_dgnet
 	else:
 		return None
-		
-		
+
+
 def filter_result(db):
 	dbres_maxlen = {'dgidb':255}
 	max_len = dbres_maxlen.setdefault('db', 50)
@@ -124,18 +119,18 @@ def files2db(fpaths, fmt='xml', db_name='', db_type='Sleepycat', saved_path='.',
 		if (len(fs.listf(dburi)) > 0):
 			is_existed = True
 	if (is_existed):
-		print '%s Database %s exists!' % (db_type, dburi)
+		print('%s Database %s exists!' % (db_type, dburi))
 		return db_path
-	
-	print 'Creating RDF database %s in %s...' % (db_name, dburi)
+
+	print('Creating RDF database %s in %s...' % (db_name, dburi))
 	graph = Graph(store=db_type, identifier=db_name)
 	graph.open(dburi, create=True)
 	for fpath in fpaths:
 		graph.parse(fpath, format=fmt)
 	graph.close()
 	return db_path
-	
-	
+
+
 def files2dbs(fpaths, fmt='xml', db_names=[], db_type='Sleepycat', saved_path='.', merge=False, merged_dbname='', cache=False):
 	if (type(fpaths) is not list):
 		if (os.path.isfile(fpaths)):
@@ -148,8 +143,8 @@ def files2dbs(fpaths, fmt='xml', db_names=[], db_type='Sleepycat', saved_path='.
 		try:
 			db_paths.append(files2db([fpath], fmt=fmt, db_name=db_name, db_type=db_type, saved_path=saved_path, cache=cache))
 		except Exception as e:
-			print 'Cannot create RDF database %s from file %s!' % (db_name, fpath)
-			print e
+			print('Cannot create RDF database %s from file %s!' % (db_name, fpath))
+			print(e)
 	if (not merge):
 		return db_paths, None
 	merged_dbname = db_names[0]+'_all' if (merged_dbname == '') else merged_dbname
@@ -158,7 +153,7 @@ def files2dbs(fpaths, fmt='xml', db_names=[], db_type='Sleepycat', saved_path='.
 		merged_dburi = get_dburi(merged_dbpath, type='sqlite')
 	else:
 		merged_dburi = get_dburi(merged_dbpath, type='bsddb')
-	print 'Creating merged RDF database %s in %s...' % (merged_dbname, merged_dburi)
+	print('Creating merged RDF database %s in %s...' % (merged_dbname, merged_dburi))
 	graph = Graph(store=db_type, identifier=merged_dbname)
 	graph.open(merged_dburi, create=True)
 	for db_path, db_name in zip(db_paths, db_names):
@@ -166,14 +161,14 @@ def files2dbs(fpaths, fmt='xml', db_names=[], db_type='Sleepycat', saved_path='.
 			g = get_db_graph(db_path, db_name=db_name, db_type=db_type)
 			graph += g
 		except Exception as e:
-			print 'Cannot merge RDF database %s in path %s !' % (db_name, db_path)
-			print e
+			print('Cannot merge RDF database %s in path %s !' % (db_name, db_path))
+			print(e)
 			g.close()
 			continue
 	graph.close()
 	return db_paths, merged_dbpath
-	
-	
+
+
 def get_db_graph(db_path, db_name='', db_type='Sleepycat'):
 	db_name = os.path.splitext(os.path.basename(db_path))[0] if db_name == '' else db_name
 	if (db_type == 'SQLAlchemy'):
@@ -182,18 +177,18 @@ def get_db_graph(db_path, db_name='', db_type='Sleepycat'):
 		dburi = get_dburi(db_path, type='sqlite')
 	else:
 		dburi = get_dburi(db_path, type='bsddb')
-	print 'Reading RDF database %s in %s' % (db_name, dburi)
+	print('Reading RDF database %s in %s' % (db_name, dburi))
 	graph = Graph(store=db_type, identifier=db_name)
 	graph.open(dburi)
 	return graph
-	
-	
+
+
 def get_id(g, label, lang='en', idns='', prdns=[], idprds={}):
 	prepareQuery = get_prepareq(g)
 	where_clause = ' UNION '.join(['''{?x %s ?c}''' % ':'.join(p) for p in idprds.keys()])
 	# The 'i' parameter in regex function means case insensitive
 	q_str = '''
-		SELECT DISTINCT ?x ?c WHERE { 
+		SELECT DISTINCT ?x ?c WHERE {
 			%s .
 			FILTER regex(str(?c), "%s", "i")
 			FILTER langMatches(lang(?c), "%s")}
@@ -201,8 +196,8 @@ def get_id(g, label, lang='en', idns='', prdns=[], idprds={}):
 	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
 	result = g.query(q)
 	return [(str(row[0]), row[1].toPython()) for row in result] if idns.isspace() else [(str(row[0]).strip(idns), row[1].toPython()) for row in result if row[0].startswith(idns)]
-	
-	
+
+
 def get_label(g, id, lang='en', idns='', prdns=[], lbprds={}):
 	id, idns_str = replace_invalid_sparql_str(id, '_'), str(idns)
 	idns = Namespace(idns_str)
@@ -210,7 +205,7 @@ def get_label(g, id, lang='en', idns='', prdns=[], lbprds={}):
 	where_clause = ' UNION '.join(['''{%s %s ?o}''' % (id if idns_str.isspace() else 'idns:'+id, ':'.join(p)) for p in lbprds.keys()])
 	# The 'i' parameter in regex function means case insensitive
 	q_str = '''
-		SELECT DISTINCT ?o WHERE { 
+		SELECT DISTINCT ?o WHERE {
 			%s .
 			FILTER langMatches(lang(?o), "%s")}
 		''' % (where_clause, lang)
@@ -235,7 +230,7 @@ def slct_sim_terms(g, label, lang='en', exhausted=False, prdns=[], eqprds={}):
 	else:
 		for p in eqprds.keys():
 			q_str = '''
-				SELECT DISTINCT ?x WHERE { 
+				SELECT DISTINCT ?x WHERE {
 					"%s"%s ^rdfs:label / (%s | ^%s) / rdfs:label ?x . }
 				''' % (label, '@%s'%lang if lang else '', ':'.join(p), ':'.join(p))
 			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
@@ -243,8 +238,8 @@ def slct_sim_terms(g, label, lang='en', exhausted=False, prdns=[], eqprds={}):
 			for row in result:
 				sim_terms.append('%s_%s' % (eqprds[p], row[0].toPython()))
 	return sim_terms
-	
-	
+
+
 def define_mesh_fn(g, lang='en', prdns=[], eqprds={}):
 	prepareQuery = get_prepareq(g)
 	def find_neighbors(g, vertices):
@@ -253,7 +248,7 @@ def define_mesh_fn(g, lang='en', prdns=[], eqprds={}):
 			if not vertex: continue
 			if (len(eqprds) == 0):
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							"%s"%s ^rdfs:label ?c1 .
 							{?c2 ?p ?c1} UNION {?c1 ?p ?c2} .
 							?c2 rdfs:label ?x . }
@@ -261,7 +256,7 @@ def define_mesh_fn(g, lang='en', prdns=[], eqprds={}):
 			else:
 				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							"%s"%s ^rdfs:label / (%s) / rdfs:label ?x . }
 					''' % (vertex, '@%s'%lang if lang else '', prdc_str)
 			q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
@@ -270,8 +265,8 @@ def define_mesh_fn(g, lang='en', prdns=[], eqprds={}):
 				neighbors.append(row[0].toPython())
 		return neighbors
 	return find_neighbors
-	
-	
+
+
 def define_meshtree_fn(g, lang='en', prdns=[], eqprds={}):
 	prepareQuery = get_prepareq(g)
 	def find_neighbors(g, vertices):
@@ -279,7 +274,7 @@ def define_meshtree_fn(g, lang='en', prdns=[], eqprds={}):
 		for vertex in vertices:
 			if not vertex: continue
 			q_str = '''
-					SELECT DISTINCT ?x WHERE { 
+					SELECT DISTINCT ?x WHERE {
 						"%s"%s ^meshv:treeNumber ?c1 .
 						{?c2 ?p ?c1} UNION {?c1 ?p ?c2} .
 						?c2 meshv:treeNumber ?x . }
@@ -290,15 +285,15 @@ def define_meshtree_fn(g, lang='en', prdns=[], eqprds={}):
 				neighbors.append(row[0].toPython())
 		return neighbors
 	return find_neighbors
-	
-	
+
+
 def define_fn(g, type='exact', has_id=True, **kwargs):
 	if (type == 'exact'):
 		return define_fn_exact(g, **kwargs) if has_id else define_fn_exact_noid(g, **kwargs)
 	elif (type == 'fuzzy'):
 		return define_fn_fuzzy(g, **kwargs) if has_id else define_fn_fuzzy_noid(g, **kwargs)
-	
-	
+
+
 def define_fn_fuzzy(g, lang='', idns=[], prdns=[], eqprds={}):
 	prepareQuery = get_prepareq(g)
 	def find_neighbors(g, vertices):
@@ -307,10 +302,10 @@ def define_fn_fuzzy(g, lang='', idns=[], prdns=[], eqprds={}):
 			if not vertex: continue
 			if (len(eqprds) == 0):
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							?s ^rdfs:label ?c1 .
 							{?c2 ?p ?c1} UNION {?c1 ?p ?c2} .
-							?c2 rdfs:label ?x . 
+							?c2 rdfs:label ?x .
 							FILTER(!isBlank(?c1)) .
 							FILTER(!isBlank(?c2)) .
 							FILTER(regex(?s, "%s", "i")) .
@@ -319,7 +314,7 @@ def define_fn_fuzzy(g, lang='', idns=[], prdns=[], eqprds={}):
 			else:
 				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							?s ^rdfs:label / (%s) ?o .
 							?o rdfs:label ?x .
 							FILTER(!isBlank(?o)) .
@@ -333,8 +328,8 @@ def define_fn_fuzzy(g, lang='', idns=[], prdns=[], eqprds={}):
 				neighbors.append(row[0].toPython())
 		return neighbors
 	return find_neighbors
-	
-	
+
+
 def define_fn_exact(g, lang='', idns=[], prdns=[], eqprds={}):
 	prepareQuery = get_prepareq(g)
 	def find_neighbors(g, vertices):
@@ -343,17 +338,17 @@ def define_fn_exact(g, lang='', idns=[], prdns=[], eqprds={}):
 			if not vertex: continue
 			if (len(eqprds) == 0):
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							"%s"%s ^rdfs:label ?c1 .
 							{?c2 ?p ?c1} UNION {?c1 ?p ?c2} .
-							?c2 rdfs:label ?x . 
+							?c2 rdfs:label ?x .
 							FILTER(!isBlank(?c1)) .
 							FILTER(!isBlank(?c2)) .}
 					''' % (replace_invalid_str(vertex), '@%s'%lang if lang else '')
 			else:
 				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							"%s"%s ^rdfs:label / (%s) ?o .
 							?o rdfs:label ?x .
 							FILTER(!isBlank(?o)) . }
@@ -364,8 +359,8 @@ def define_fn_exact(g, lang='', idns=[], prdns=[], eqprds={}):
 				neighbors.append(row[0].toPython())
 		return neighbors
 	return find_neighbors
-	
-	
+
+
 def define_fn_fuzzy_noid(g, lang='', idns=[], prdns=[], eqprds={}):
 	prepareQuery = get_prepareq(g)
 	def find_neighbors(g, vertices):
@@ -374,7 +369,7 @@ def define_fn_fuzzy_noid(g, lang='', idns=[], prdns=[], eqprds={}):
 			if not vertex: continue
 			if (len(eqprds) == 0):
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							{?c ?p ?x} UNION {?x ?p ?c} .
 							FILTER(!isBlank(?x)) .
 							FILTER(regex(str(?c), "%s", "i")) .}
@@ -382,7 +377,7 @@ def define_fn_fuzzy_noid(g, lang='', idns=[], prdns=[], eqprds={}):
 			else:
 				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							?c (%s) ?x .
 							FILTER(!isBlank(?x)) .
 							FILTER(regex(str(?c), "%s", "i")) .}
@@ -393,8 +388,8 @@ def define_fn_fuzzy_noid(g, lang='', idns=[], prdns=[], eqprds={}):
 				neighbors.append(row[0].toPython())
 		return neighbors
 	return find_neighbors
-	
-	
+
+
 def define_fn_exact_noid(g, lang='', idns=[], prdns=[], eqprds={}):
 	prepareQuery = get_prepareq(g)
 	def find_neighbors(g, vertices):
@@ -403,7 +398,7 @@ def define_fn_exact_noid(g, lang='', idns=[], prdns=[], eqprds={}):
 			if not vertex: continue
 			if (len(eqprds) == 0):
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							{?c ?p ?x} UNION {?x ?p ?c} .
 							FILTER(str(?c)="%s") .
 							FILTER(!isBlank(?x)) .}
@@ -411,7 +406,7 @@ def define_fn_exact_noid(g, lang='', idns=[], prdns=[], eqprds={}):
 			else:
 				prdc_str = ' | '.join(['%s | ^%s' % (':'.join(p), ':'.join(p)) for p in eqprds.keys()])
 				q_str = '''
-						SELECT DISTINCT ?x WHERE { 
+						SELECT DISTINCT ?x WHERE {
 							?c (%s) ?x .
 							FILTER(str(?c)="%s") .
 							FILTER(!isBlank(?x)) .}
@@ -422,8 +417,8 @@ def define_fn_exact_noid(g, lang='', idns=[], prdns=[], eqprds={}):
 				neighbors.append(row[0].toPython())
 		return neighbors
 	return find_neighbors
-	
-	
+
+
 def _default_fn(g, vertices):
 	return set(func.flatten([np.where(g[i] == 1)[0].astype('int').tolist() for i in vertices])) - set(vertices)
 
@@ -434,12 +429,12 @@ def transitive_closure_sg(g, vertices, find_neighbors=_default_fn, max_length=10
 		return coo_matrix([], dtype='int64')
 	csgraph_dict = {}
 	zero_lbs, clstr_lbs, neighbor_record, neighbor_set = np.zeros(len(vertices), dtype='int64'), np.arange(len(vertices), dtype='int64'), [[set([v])] for v in vertices], [set([v]) for v in vertices]
-	for k in xrange(max_length):
+	for k in range(max_length):
 		# All the vertices are clustered together
 		if (np.array_equal(zero_lbs, clstr_lbs)):
 			break
 		# Find neighbors for each cluster with distance of 1
-		for i in xrange(len(vertices)):
+		for i in range(len(vertices)):
 			neighbors = set(find_neighbors(g, neighbor_record[i][-1])) - neighbor_set[i]
 			neighbor_record[i].append(neighbors)
 			neighbor_set[i] |= neighbors
@@ -448,14 +443,14 @@ def transitive_closure_sg(g, vertices, find_neighbors=_default_fn, max_length=10
 				continue
 			overlapped = False
 			overlaps = neighbor_record[vrtx_pair[0]][-1] & neighbor_record[vrtx_pair[1]][-2]
-			if (len(overlaps) > 0):                  
+			if (len(overlaps) > 0):
 				overlapped = True
 				# Update the latest neighbor record
 				neighbor_record[vrtx_pair[0]][-1] -= overlaps
 				# Update the distance between two vertices
 				csgraph_dict[vrtx_pair] = (k + 1) * 2 - 1
 			overlaps = neighbor_record[vrtx_pair[1]][-1] & neighbor_record[vrtx_pair[0]][-2]
-			if (len(overlaps) > 0):                  
+			if (len(overlaps) > 0):
 				overlapped = True
 				neighbor_record[vrtx_pair[1]][-1] -= overlaps
 				csgraph_dict[vrtx_pair[::-1]] = (k + 1) * 2 - 1
@@ -476,8 +471,8 @@ def transitive_closure_sg(g, vertices, find_neighbors=_default_fn, max_length=10
 	idx_list, v_list = zip(*csgraph_dict.items())
 	indices, values = np.array(idx_list, dtype='int64'), np.array(v_list, dtype='int64')
 	return coo_matrix((values, (indices[:,0], indices[:,1])), shape=(len(vertices), len(vertices)), dtype='int64')
-	
-	
+
+
 # Transitive Closure in Dynamic Subgraph
 def transitive_closure_dsg(g, vertices, find_neighbors=_default_fn, filter=None, cleaner=None, min_length=1, max_length=5):
 	vertices = list(set(vertices))
@@ -487,11 +482,11 @@ def transitive_closure_dsg(g, vertices, find_neighbors=_default_fn, filter=None,
 	csgraph_dict, new_vrtx, vrtx_idx, all_vrtx = {}, [], dict([(x, i) for i, x in enumerate(vertices)]), set(vertices)
 	# Zero label, cluster labels for the concerned vertices, two slots queue to keep the last two neighbor records, the distances between the newest neighbor sets to the corresponding concerned vertices, all neighbors for each concerned vertex
 	zero_lbs, clstr_lbs, neighbor_record, neighbor_dist, neighbor_set = np.zeros(len(vertices), dtype='int64'), np.arange(len(vertices), dtype='int64'), [[set([]), set([v])] for v in vertices], [0 for v in vertices], [set([v]) for v in vertices]
-	for k in xrange(max_length):
+	for k in range(max_length):
 		if (np.array_equal(zero_lbs, clstr_lbs) and k > min_length):
 			break
 		# Obtain the new neighbors for each vertex
-		for i in xrange(len(vertices)):
+		for i in range(len(vertices)):
 			neighbors = set(find_neighbors(g, neighbor_record[i][-1])) - neighbor_set[i]
 			# Filter the vertices
 			if (filter is not None):
@@ -503,7 +498,7 @@ def transitive_closure_dsg(g, vertices, find_neighbors=_default_fn, filter=None,
 			neighbor_record[i].append(neighbors)
 			neighbor_dist[i] += 1
 			neighbor_set[i] |= neighbors
-			# Recognize new vertices and update index 
+			# Recognize new vertices and update index
 			new_v = neighbors - all_vrtx
 			vrtx_idx.update(dict([(x, j) for j, x in zip(range(len(vertices) + len(new_vrtx), len(vertices) + len(new_vrtx) + len(new_v)), new_v)]))
 			new_vrtx.extend(list(new_v))
@@ -524,12 +519,12 @@ def transitive_closure_dsg(g, vertices, find_neighbors=_default_fn, filter=None,
 			pair_dist = neighbor_dist[vrtx_pair[0]] + neighbor_dist[vrtx_pair[1]]
 			overlapped = False
 			overlaps = neighbor_record[vrtx_pair[0]][1] & neighbor_record[vrtx_pair[1]][0]
-			if (len(overlaps) > 0):                  
+			if (len(overlaps) > 0):
 				overlapped = True
 				neighbor_record[vrtx_pair[0]][1] -= overlaps
 				csgraph_dict[vrtx_pair] = min(csgraph_dict.setdefault(vrtx_pair, pair_dist - 1), pair_dist - 1)
 			overlaps = neighbor_record[vrtx_pair[1]][1] & neighbor_record[vrtx_pair[0]][0]
-			if (len(overlaps) > 0):                  
+			if (len(overlaps) > 0):
 				overlapped = True
 				neighbor_record[vrtx_pair[1]][1] -= overlaps
 				csgraph_dict[vrtx_pair[::-1]] = min(csgraph_dict.setdefault(vrtx_pair[::-1], pair_dist - 1), pair_dist - 1)
@@ -574,6 +569,6 @@ def test_mss():
 	# col = np.array(itemgetter(*dist.col)(idx))
 	# print row.shape, col.shape, val.shape
 	dist = coo_matrix((dist.data, (itemgetter(*dist.row)(idx), itemgetter(*dist.col)(idx))), shape=(vrtx_num, vrtx_num))
-	print data
-	print dist.todense()
-	print shortest_path(dist.tocsr())
+	print(data)
+	print(dist.todense())
+	print(shortest_path(dist.tocsr()))

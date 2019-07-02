@@ -19,7 +19,7 @@ from keras.optimizers import SGD
 from keras import activations
 from keras import backend as K
 
-import kerasext
+from . import kerasext
 
 
 class CFKBase(Layer):
@@ -35,8 +35,8 @@ class CFKBase(Layer):
 	def get_output_shape_for(self, input_shape):
 		assert input_shape and len(input_shape) == 2
 		return (input_shape[0], self.output_dim)
-		
-		
+
+
 class CFKU(CFKBase):
 	def __init__(self, output_dim, input_dim=None, **kwargs):
 		self.activation = activations.get('softmax')
@@ -55,13 +55,13 @@ class CFKU(CFKBase):
 		U = K.dot(X, self.W) + self.b
 		output = K.reshape(U, (-1, self.output_dim))
 		return self.activation(output)
-		
-		
+
+
 class CFKD(CFKBase):
 	def __init__(self, output_dim, input_dim=None, metric='euclidean', **kwargs):
 		self.metric = metric
 		super(CFKD, self).__init__(output_dim, input_dim=input_dim, **kwargs)
-		
+
 	def build(self, input_shape):
 		mean, std = 0.0, 1.0
 		M_init = stats.truncnorm.rvs(-2 * std, 2 * std, loc=mean, scale=std, size=(self.output_dim, self.input_dim))
@@ -72,7 +72,7 @@ class CFKD(CFKBase):
 	def call(self, inputs, mask=None):
 		X, U = inputs
 		batch_size = K.cast(K.shape(X)[0], 'int32')
-		C = K.dot(K.transpose(U), X) / K.cast(batch_size, 'float32')
+		C = int(K.dot(K.transpose(U), X) / K.cast(batch_size, 'float32'))
 		large_X = K.repeat_elements(K.reshape(X, (-1, 1, self.input_dim)), self.output_dim, axis=1)
 		if (os.environ['KERAS_BACKEND'] == 'tensorflow'):
 			batch_size = K.int_shape(X)[0]
@@ -85,12 +85,12 @@ class CFKD(CFKBase):
 			D = K.sum(K.square((large_X - large_C) * large_M), axis=2)
 		output = K.reshape(D, (-1, self.output_dim))
 		return output
-		
+
 	def get_output_shape_for(self, input_shape):
 		assert input_shape and len(input_shape) == 2 and len(input_shape[0]) == 2 and len(input_shape[1]) == 2
 		return (input_shape[0][0], self.output_dim)
-		
-		
+
+
 class CFKC(CFKBase):
 	def __init__(self, output_dim, input_dim=None, **kwargs):
 		super(CFKC, self).__init__(output_dim, input_dim=input_dim, **kwargs)
@@ -105,13 +105,13 @@ class CFKC(CFKBase):
 	def get_output_shape_for(self, input_shape):
 		assert input_shape and len(input_shape) == 3 and len(input_shape[0]) == 2 and len(input_shape[1]) == 2 and len(input_shape[2]) == 2
 		return (input_shape[0][0], self.output_dim)
-		
-		
+
+
 # Constraint Fuzzy K-means Neural Network
 def _cfkmeans_loss(Y_true, Y):
 	import keras.backend as K
 	return K.mean(Y)
-	
+
 
 def cfkmeans_mdl(input_dim=1, output_dim=1, constraint_dim=0, batch_size=32, backend='th', device='', session=None, internal_dim=64, metric='euclidean', gamma=0.01, **kwargs):
 	with kerasext.gen_cntxt(backend, device):

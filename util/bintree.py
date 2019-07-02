@@ -11,7 +11,7 @@
 
 from binarytree import convert, pprint
 
-import func
+from . import func
 
 
 class Node(object):
@@ -20,7 +20,7 @@ class Node(object):
 		self.left = left
 		self.right = right
 		self.parent = parent
-		
+
 try:
 	from ete3 import Tree
 	class ETENode(Tree):
@@ -35,7 +35,7 @@ try:
 			self.children.extend([x for x in [self.left, self.right] if x is not None])
 			self.up = self.parent
 except Exception as e:
-	print e
+	print(e)
 
 
 def from_childlist(node_list, order='bottom_up', node_type='normal'):
@@ -44,8 +44,8 @@ def from_childlist(node_list, order='bottom_up', node_type='normal'):
 	elif (order == 'top_down'):
 		root = preorder_build(0, None, node_list, node_type=node_type)
 	return root
-		
-		
+
+
 def preorder_build(node_id, parent_node, node_list, node_type='normal'):
 	if (node_type == 'ete'):
 		node = ETENode(data=node_list[node_id]['data'], parent=parent_node)
@@ -72,8 +72,8 @@ def preorder_build(node_id, parent_node, node_list, node_type='normal'):
 	if (node_type == 'ete'):
 		node.post_build()
 	return node
-	
-	
+
+
 def preorder_getnode(node):
 	data_list = [node]
 	if (node.left != None):
@@ -81,8 +81,8 @@ def preorder_getnode(node):
 	if (node.right != None):
 		data_list.extend(preorder_getnode(node.right))
 	return data_list
-	
-	
+
+
 def preorder_search(node, cond_func, stop_found=False):
 	results = []
 	if (cond_func(node)):
@@ -94,8 +94,8 @@ def preorder_search(node, cond_func, stop_found=False):
 	if (node.right != None):
 		results.extend(preorder_search(node.right, cond_func, stop_found=stop_found))
 	return results
-	
-	
+
+
 def preorder_modify(node, in_func, out_func, **kwargs):
 	in_func(node, **kwargs)
 	if (node.left != None):
@@ -138,9 +138,9 @@ def bottom_up(leaves, node_pair_gen=None, npg_params={}):
 	root = convert(func.flatten_list(ordered_levels))
 	# pprint(root)
 	return root
-	
+
 def _npg(leaf_sets, **kwargs):
-	for i in xrange(len(leaf_sets) / 2):
+	for i in range(int(len(leaf_sets) / 2)):
 		yield (2 * i, 2 * i + 1), {}
 	if (len(leaf_sets) % 2 != 0):
 		yield (len(leaf_sets) - 1,), {}

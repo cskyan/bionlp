@@ -9,18 +9,14 @@
 ###########################################################################
 #
 
-import os
-import string
-import itertools
+import os, string, itertools
 
 import numpy as np
 import scipy as sp
 import pandas as pd
 import nltk
 
-from util import func
-from util import fs
-from util import io
+from .util import fs, io, func
 
 
 def get_nltk_words():
@@ -55,28 +51,28 @@ def find_location(text, tokens):
 
 def annot_align(annot_locs, token_locs, error=0):
 	token2annot, annot2token = [[] for x in range(len(token_locs))], [[] for x in range(len(annot_locs))]
-	for i in xrange(len(annot_locs)):
+	for i in range(len(annot_locs)):
 		token_list = []
 		for loc in annot_locs[i]:
-			for j in xrange(len(token_locs)):	# Make sure to start from the early position
+			for j in range(len(token_locs)):	# Make sure to start from the early position
 				# Align the starting position of the annotation. It may be aligned to the middle of a token.
 				if (abs(token_locs[j][0] - loc[0]) <= error or (token_locs[j][0] < loc[0] and loc[0] < token_locs[j][1])):
 					# Determine whether the following tokens should be aligned to the annotation
-					for k in xrange(j, len(token_locs)):
+					for k in range(j, len(token_locs)):
 						token2annot[k].append(i)
 						token_list.append(k)
 						# Align the ending position of the annotation. It may be aligned to the middle of a token.
 						if (abs(token_locs[k][1] - loc[1]) <= error or loc[1] < token_locs[k][1]):
 							break
 					else:
-						print 'Failed to find ending position of the \'%s\' annotation from the %i token.' % (i, j)
+						print('Failed to find ending position of the \'%s\' annotation from the %i token.' % (i, j))
 						# print loc, token_locs
 					break
 			else:
-				print 'Failed to find opening position of the \'%s\' annotation.' % i
+				print('Failed to find opening position of the \'%s\' annotation.' % i)
 				# print loc, token_locs
 		if (len(token_list) == 0):
-			print 'Failed to find tokens of the \'%s\' annotation.' % i
+			print('Failed to find tokens of the \'%s\' annotation.' % i)
 			# print loc, token_locs
 		annot2token[i].extend(token_list)
 	# print '\t'.join(['-'.join([str(l), '<%s>'%a]) for l,a in zip(token_locs, token2annot)])
@@ -199,7 +195,7 @@ def dpnd_trnsfm(dict_data, shape, encoding='categorical', **kwargs):
 			class_lbs.remove('')
 		except:
 			pass
-		if kwargs.has_key('class_lbmap'):
+		if 'class_lbmap' in kwargs:
 			orig_class_num = len(kwargs['class_lbmap'])
 			class_lbs -= set(kwargs['class_lbmap'].keys())
 			class_lbmap = func.update_dict(kwargs['class_lbmap'], dict(zip(class_lbs, range(orig_class_num, orig_class_num + len(class_lbs)))))
@@ -267,7 +263,7 @@ def parse(text, method='spacy', fmt='mt', tree_shape='symm', dpnd_encoding='cate
 		try:
 			rrp.check_models_loaded_or_error('auto')
 		except ValueError as e:
-			print e
+			print(e)
 			rrp = RerankingParser.fetch_and_load('GENIA+PubMed', verbose=True)
 		# Parse each sentence
 		global_tokens = []

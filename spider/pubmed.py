@@ -9,14 +9,10 @@
 ###########################################################################
 #
 
-import os
-import sys
-import urllib
-import urllib2
-import codecs
-import xmlextrc
+import os, sys, codecs, urllib
 
 from ..util import fs
+from . import xmlextrc
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
@@ -40,15 +36,15 @@ class PubMedBuilder():
 		self.keywords = []
 		self.mesh_headings = []
 		self.chemicals = []
-		
+
 	def start(self, tag, attrib):
 		self._tag = tag
 		self._tag_stack.append(self._tag)
 		# Process the attributes
-	
+
 	def end(self, tag):
 		self._tag_stack.pop()
-		
+
 	def data(self, data):
 		if data.isspace():
 			return
@@ -73,7 +69,7 @@ class PubMedBuilder():
 		if (self._tag == 'NameOfSubstance'):
 			if (self._tag_stack[-2] == 'Chemical'):
 				self.chemicals.append(data)
-		
+
 	def close(self):
 		pass
 
@@ -82,27 +78,27 @@ class PubMedBuilder():
 
 
 def get_pmids(ss, max_num=1000):
-	url = BASE_URL + "esearch.fcgi?db=pubmed&term=" + urllib.quote(ss) + "&rettype=abstract&retmode=text&usehistory=y&retmax=%i" % (max_num)
-	print "Search String:\n" + url + '\n'
-	res = urllib2.urlopen(url).read()
+	url = BASE_URL + "esearch.fcgi?db=pubmed&term=" + urllib.parse.quote(ss) + "&rettype=abstract&retmode=text&usehistory=y&retmax=%i" % (max_num)
+	print("Search String:\n" + url + '\n')
+	res = urllib.request.urlopen(url).read()
 
 	pmid_list = xmlextrc.extrc_list('IdList', 'Id', '.', None, res, 'text')
-	print "Number of obtained pmids: %i\n" % len(pmid_list)
+	print("Number of obtained pmids: %i\n" % len(pmid_list))
 	return pmid_list
 
-	
+
 def fetch_abs(pmid_list, saved_path=ABS_PATH):
 	fs.mkdir(saved_path)
 	url = BASE_URL + "efetch.fcgi?db=pubmed&retmode=xml&id=" + ','.join(pmid_list)
-	print "Fetch String:\n" + url + '\n'
-	res = urllib2.urlopen(url).read()
-	
+	print("Fetch String:\n" + url + '\n')
+	res = urllib.request.urlopen(url).read()
+
 	abs_tree = xmlextrc.extrc_list('PubmedArticleSet', 'PubmedArticle', './MedlineCitation/Article/Abstract', None, res, 'elem')
 	abs_text = []
 	for abs in abs_tree:
 		contents = xmlextrc.extrc_list('Abstract', 'AbstractText', '.', abs, '', 'text')
 		abs_text.append(' \n'.join(contents))
-	print "Number of obtained abstracts: %i\n" % len(abs_text)
+	print("Number of obtained abstracts: %i\n" % len(abs_text))
 	if saved_path is not None:
 		for id, abs in zip(pmid_list, abs_text):
 			fs.write_file(abs, os.path.join(ABS_PATH, str(id)+'.txt'), code='utf8')
@@ -111,9 +107,9 @@ def fetch_abs(pmid_list, saved_path=ABS_PATH):
 
 def fetch_artcls(pmid_list, saved_path=DATA_PATH):
 	url = BASE_URL + "efetch.fcgi?db=pubmed&retmode=xml&id=" + ','.join(pmid_list)
-	print "Fetch String:\n" + url + '\n'
-	res = urllib2.urlopen(url).read()
-	
+	print("Fetch String:\n" + url + '\n')
+	res = urllib.request.urlopen(url).read()
+
 	artcl_xml = xmlextrc.extrc_list('PubmedArticleSet', 'PubmedArticle', '.', None, res, 'xml')
 	articles = []
 	for artcl in artcl_xml:
@@ -121,13 +117,13 @@ def fetch_artcls(pmid_list, saved_path=DATA_PATH):
 		parser = xmlextrc.get_parser(builder)
 		parser.feed(artcl)
 		articles.append(builder.build())
-	print "Number of obtained articles: %i\n" % len(artcl_xml)
+	print("Number of obtained articles: %i\n" % len(artcl_xml))
 	if saved_path is not None:
 		feat_attr = {'abs':['abs', 'txt'], 'kws':['kws', 'txt'], 'mesh':['mesh', 'mesh'], 'chem':['chem', 'chem']}
-		for f, a in feat_attr.iteritems():
+		for f, a in feat_attr.items():
 			fs.mkdir(os.path.join(saved_path, a[0]))
 		for id, artcls in zip(pmid_list, articles):
-			for f, a in feat_attr.iteritems():
+			for f, a in feat_attr.items():
 				if (hasattr(artcls[f], '__iter__')):
 					attr_text = '\n'.join(artcls[f])
 				else:

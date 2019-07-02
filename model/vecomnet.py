@@ -23,7 +23,7 @@ import keras.backend as K
 
 from ..spider import w2v
 from ..util import func
-import kerasext
+from . import kerasext
 
 
 def get_cbow_context(words, indices, window_size=0, include_target=True):
@@ -71,7 +71,7 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=No
 			w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
 			embd_layer = w2v_wrapper.get_embedding_layer(type='keras', trainable=False, name='WordEmbedding')
 			if (cw2v_path is not None and os.path.exists(cw2v_path)): # Append the concept embeddings to the original word embeddings layer
-				print 'Using alternative concept embedding model!'
+				print('Using alternative concept embedding model!')
 				cw2v_wrapper = w2v.GensimW2VWrapper(cw2v_path)
 				cncpt_embd_layer = cw2v_wrapper.get_embedding_layer(type='keras', trainable=False, name='ConceptEmbedding')
 				word_embeddings = [embd_layer(crop(1, 0, input_dim)(x)) for i, x in enumerate(X_inputs)]
@@ -93,7 +93,7 @@ def vecomnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=No
 			with kerasext.gen_cntxt(backend, device, session=session):
 				embeddings = [Dropout(drop_ratio, name='WordEmbedding%i-Rgl'%i)(embd) for i, embd in enumerate(embeddings)]
 				# lstms = [RNN([LSTMCell(lstm_dim)] * lstm_num, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
-				lstms = [LSTM(lstm_dim, name='BidirectionalLSTM%i-%s'%(i/2,'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
+				lstms = [LSTM(lstm_dim, name='BidirectionalLSTM%i-%s'%(int(i/2),'FW' if i%2==0 else 'BW'))(embd) for i, embd in enumerate(embeddings)]
 				# lstms = [Dropout(drop_ratio, name='BidirectionalLSTM%i-%s-Rgl'%(i/2,'FW' if i%2==0 else 'BW'))(lstm) for i, lstm in enumerate(lstms)]
 				cbow_cntxts = [Concatenate(name='CBOW0')(lstms[:2]), Concatenate(name='CBOW1')(lstms[2:])]
 				mlps = [Dense(ent_mlp_dim, activation='tanh', input_shape=(lstm_dim*2,), name='MLP%i-L1'%i)(cntxt) for i, cntxt in enumerate(cbow_cntxts)]
@@ -165,7 +165,7 @@ def vecentnet_mdl(input_dim=1, output_dim=1, w2v_path='wordvec.bin', cw2v_path=N
 		w2v_wrapper = w2v.GensimW2VWrapper(w2v_path)
 		embd_layer = w2v_wrapper.get_embedding_layer(type='keras', trainable=False, name='WordEmbedding')
 		if (cw2v_path is not None and os.path.exists(cw2v_path)): # Append the concept embeddings to the original word embeddings layer
-			print 'Using alternative concept embedding model!'
+			print('Using alternative concept embedding model!')
 			cw2v_wrapper = w2v.GensimW2VWrapper(cw2v_path)
 			word_embeddings = [embd_layer(crop(1, 0, input_dim)(x)) for i, x in enumerate(X_inputs)]
 			cncpt_embeddings = [embd_layer(crop(1, input_dim - 1, input_dim)(x)) for i, x in enumerate(X_inputs)]
@@ -272,6 +272,6 @@ def fill(axis, val=0, rep=1, expand_dims=False):
 
 def mask_avg(axis, keep_dim=False):
 	def func(x):
-		reduced_sum = K.sum(x, axis=axis) / K.sum(K.cast(K.not_equal(x, 0), 'float32'), axis=axis)
+		reduced_sum = int(K.sum(x, axis=axis) / K.sum(K.cast(K.not_equal(x, 0), 'float32'), axis=axis))
 		return K.expand_dims(reduced_sum, axis=axis) if keep_dim else reduced_sum
 	return Lambda(func)

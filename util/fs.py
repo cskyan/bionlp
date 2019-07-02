@@ -9,22 +9,18 @@
 ###########################################################################
 #
 
-import os
-import re
-import sys
-import codecs
-import StringIO
-import cStringIO
+import os, re, sys, codecs
+from . import io
 
 
 def mkdir(path):
 	if path and not os.path.exists(path):
-		print "Creating folder: " + path
+		print(("Creating folder: " + path))
 		os.makedirs(path)
-		
+
 
 def read_file(fpath, code='ascii'):
-	if (isinstance(fpath, StringIO.StringIO) or isinstance(fpath, cStringIO.InputType)):
+	if (isinstance(fpath, io.StringIO) or isinstance(fpath, io.InputType)):
 		return fpath.readlines()
 	try:
 		data_str = []
@@ -37,22 +33,22 @@ def read_file(fpath, code='ascii'):
 				for line in fd.readlines():
 					data_str.append(line)
 	except Exception as e:
-		print e
-		print 'Can not open the file \'%s\'!' % fpath
+		print(e)
+		print(('Can not open the file \'%s\'!' % fpath))
 		raise
 	return data_str
-	
-	
+
+
 def read_files(fpaths, code='ascii'):
 	for fpath in fpaths:
 		try:
 			yield read_file(fpath, code)
 		except Exception as e:
 			continue
-	
-	
+
+
 def write_file(content, fpath, code='ascii'):
-	if (isinstance(fpath, StringIO.StringIO) or isinstance(fpath, cStringIO.OutputType)):
+	if (isinstance(fpath, io.StringIO) or isinstance(fpath, io.OutputType)):
 		fpath.write(content)
 		return
 	try:
@@ -65,23 +61,23 @@ def write_file(content, fpath, code='ascii'):
 				fd.write(content)
 				fd.close()
 	except Exception as e:
-		print e
-		print 'Can not write to the file \'%s\'!' % fpath
+		print(e)
+		print(('Can not write to the file \'%s\'!' % fpath))
 		sys.exit(-1)
-		
-		
+
+
 def write_files(contents, fpaths, code='ascii'):
-	for i in xrange(min(len(fpaths), len(contents))):
+	for i in range(min(len(fpaths), len(contents))):
 		try:
 			write_file(contents[i], fpaths[i], code)
 		except Exception as e:
 			continue
 
-			
+
 def pardir(path):
 	return os.path.abspath(os.path.join(path, os.pardir))
-			
-		
+
+
 def listf(path, pattern='.*', full_path=False):
 	prog = re.compile(pattern)
 	if (full_path):
