@@ -2,7 +2,7 @@
 # -*- coding=utf-8 -*-
 ###########################################################################
 # Copyright (C) 2013-2016 by Caspar. All rights reserved.
-# File Name: annot.py
+# File Name: becas.py
 # Author: Shankai Yan
 # E-mail: sk.yan@my.cityu.edu.hk
 # Created Time: 2017-02-14 21:44:35
@@ -19,9 +19,9 @@ from .. import nlp
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
-elif sys.platform.startswith('linux'):
+elif sys.platform.startswith('linux2'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
-ANT_PATH = os.path.join(DATA_PATH, 'annot')
+ANT_PATH = os.path.join(DATA_PATH, 'becas')
 SC=';;'
 
 
