@@ -45,6 +45,7 @@ class AnnotParser(HTMLParser):
 		self.annots = []
 
 	def handle_starttag(self, tag, attrib):
+		if tag in ['br', 'link', 'input']: return
 		self._tag = tag
 		self._tag_stack.append(self._tag)
 		if (self._tag == 'span'):
@@ -55,8 +56,10 @@ class AnnotParser(HTMLParser):
 					self._annots = [dict(id=annot[-2], loc=[self.offset, self.offset], text='', type=annot[-1]) for annot in annot_txt]
 
 	def handle_endtag(self, tag):
+		if tag in ['br', 'link', 'input']: return
 		self._tag = tag
 		self._tag_stack.pop()
+		self._tag = self._tag_stack[-1] if len(self._tag_stack) > 0 else ''
 
 	def handle_data(self, data):
 		if data.isspace(): return
@@ -79,7 +82,7 @@ class MonaInitAPI(APIClient, object):
 	BASE_URL = 'https://scigraph-ontology.monarchinitiative.org/scigraph'
 	_function_url = {'annotate':'annotations'}
 	_default_param = {'annotate':dict(content='', minLength=4, longestOnly='false', includeAbbrev='false', includeAcronym='false', includeNumbers='false')}
-	_func_restype = {'annotate':'xml'}
+	_func_restype = {'annotate':'html'}
 	_parm_options = {'annotate':{}}
 
 	def __init__(self, function='annotate'):
@@ -91,7 +94,7 @@ class MonaInitAPI(APIClient, object):
 		self.restype = self._func_restype.setdefault(function, 'json')
 
 	def _handle_response(self, response):
-		if (self.restype == 'xml'):
+		if (self.restype == 'html'):
 			parser = AnnotParser()
 			try:
 				parser.feed(ftfy.fix_text(response.data.decode('utf-8')))

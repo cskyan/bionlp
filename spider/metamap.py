@@ -19,10 +19,10 @@ from sklearn.preprocessing import MultiLabelBinarizer
 
 import ftfy
 
-# from .. import nlp
-# from ..util import fs, io, oo, func
-from bionlp import nlp
-from bionlp.util import fs, io, oo, func
+from .. import nlp
+from ..util import fs, io, oo, func
+# from bionlp import nlp
+# from bionlp.util import fs, io, oo, func
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\ontolib\\store'
