@@ -33,7 +33,7 @@ def annotext(text, ontos=[], umls=False, rare_pheno=False):
 	custom_thesaurus = os.path.join(clinphen.srcDir, 'data', 'hpo_umls_thesaurus.txt') if umls else ''
 	df = pd.read_table(StringIO(clinphen.main(StringIO(ftfy.fix_text(text)), custom_thesaurus, rare_pheno)))
 	res = [dict(zip(df.columns, x)) for x in zip(*[df[col] for col in df.columns])]
-	return [dict(id=r['HPO ID'], name=r['Phenotype name'], occrns=r['No. occurrences'], text=r['Example sentence']) for r in res]
+	return [dict(id=r['HPO ID'].replace(':', '_'), name=r['Phenotype name'], occrns=r['No. occurrences'], text=r['Example sentence']) for r in res]
 
 
 if __name__ == '__main__':

@@ -32,6 +32,7 @@ def annotext(text, ontos=[]):
 	res = client.call(content=text)
 	if len(ontos) > 0:
 		res = [r for r in res if any([r['id'].startswith(onto.upper()) for onto in ontos])] if len(ontos) > 0 else res
+	for r in res: r['id'] = r['id'].replace(':', '_')
 	return res
 
 
