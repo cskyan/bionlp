@@ -31,6 +31,7 @@ elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'ontolib')
 
 RDFS_LABEL_MAP = {('rdfs','label'):'lb'}
+OBOWL_REF_MAP = {('obowl', 'hasDbXref'): 'ref'}
 MESH_EQPRDC_MAP = {('meshv','concept'):'co', ('meshv','preferredConcept'):'pc', ('meshv','relatedConcept'):'rc', ('meshv','term'):'tm', ('meshv','preferredTerm'):'pt'}
 MESH_BTPRDC_MAP = {('meshv','broader'):'br', ('meshv','broaderConcept'):'bc', ('meshv','broaderDescriptor'):'bd'}
 MESH_NTPRDC_MAP = {('meshv','narrowerConcept'):'nc'}
@@ -183,22 +184,26 @@ def get_db_graph(db_path, db_name='', db_type='Sleepycat'):
 	return graph
 
 
-def get_id(g, label, lang='en', idns='', prdns=[], idprds={}):
+def get_id(g, label, lang='', idns='', prdns=[], lbprds=RDFS_LABEL_MAP):
 	prepareQuery = get_prepareq(g)
-	where_clause = ' UNION '.join(['''{?x %s ?c}''' % ':'.join(p) for p in idprds.keys()])
+	where_clause = ' UNION '.join(['''{?x %s ?c}''' % ':'.join(p) for p in lbprds.keys()])
 	# The 'i' parameter in regex function means case insensitive
 	q_str = '''
 		SELECT DISTINCT ?x ?c WHERE {
 			%s .
 			FILTER regex(str(?c), "%s", "i")
 			FILTER langMatches(lang(?c), "%s")}
-		''' % (where_clause, replace_invalid_str(label, ' '), lang)
+		''' % (where_clause, replace_invalid_str(label, ' '), lang) if lang and not lang.isspace() else '''
+		SELECT DISTINCT ?x ?c WHERE {
+			%s .
+			FILTER regex(str(?c), "%s", "i")}
+		''' % (where_clause, replace_invalid_str(label, ' '))
 	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns))
 	result = g.query(q)
 	return [(str(row[0]), row[1].toPython()) for row in result] if idns.isspace() else [(str(row[0]).strip(idns), row[1].toPython()) for row in result if row[0].startswith(idns)]
 
 
-def get_label(g, id, lang='en', idns='', prdns=[], lbprds={}):
+def get_label(g, id, lang='', idns='', prdns=[], lbprds=RDFS_LABEL_MAP):
 	id, idns_str = replace_invalid_sparql_str(id, '_'), str(idns)
 	idns = Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
@@ -208,10 +213,32 @@ def get_label(g, id, lang='en', idns='', prdns=[], lbprds={}):
 		SELECT DISTINCT ?o WHERE {
 			%s .
 			FILTER langMatches(lang(?o), "%s")}
-		''' % (where_clause, lang)
+		''' % (where_clause, lang) if lang and not lang.isspace() else '''
+		SELECT DISTINCT ?o WHERE {
+			%s .}
+		''' % (where_clause)
 	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
 	result = g.query(q)
 	return [row[0].toPython() for row in result]
+
+
+def get_ref(g, id, lang='', idns='', prdns=[], refprds=OBOWL_REF_MAP, revrel=False):
+	id, idns_str = replace_invalid_sparql_str(id, '_'), str(idns)
+	idns = Namespace(idns_str)
+	prepareQuery = get_prepareq(g)
+	where_clause = ' UNION '.join(['''{?x %s "%s"}''' % (':'.join(p), id) if revrel else '''{%s %s ?x}''' % (id if idns_str.isspace() else 'idns:'+id, ':'.join(p)) for p in refprds.keys()])
+	# The 'i' parameter in regex function means case insensitive
+	q_str = '''
+		SELECT DISTINCT ?x WHERE {
+			%s .
+			FILTER langMatches(lang(?c), "%s")}
+		''' % (where_clause, lang) if lang and not lang.isspace() else '''
+		SELECT DISTINCT ?x WHERE {
+			%s .}
+		''' % (where_clause)
+	q = prepareQuery(q_str, initNs=dict([('obowl', OBOWL)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
+	result = g.query(q)
+	return [row[0].toPython().lstrip(idns_str) if revrel else row[0].toPython() for row in result]
 
 
 def slct_sim_terms(g, label, lang='en', exhausted=False, prdns=[], eqprds={}):
