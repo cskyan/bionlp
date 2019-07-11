@@ -105,7 +105,7 @@ class MonaInitAPI(APIClient, object):
 			parser.close()
 			return parser.build()
 		elif (self.restype == 'json'):
-			return json.loads(ftfy.fix_text(response.data.decode('utf-8')).replace('\\', ''))
+			return json.loads(ftfy.fix_text(response.data.decode('utf-8', errors='replace')).replace('\\', ''))
 
 	def call(self, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])

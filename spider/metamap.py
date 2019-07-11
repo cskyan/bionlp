@@ -95,7 +95,7 @@ class Wrapper():
 	def raw_parse(self, text, src=[]):
 		import spacy
 		spacy_nlp = spacy.load('en_core_web_sm')
-		doc = spacy_nlp(ftfy.fix_text(text))
+		doc = spacy_nlp(ftfy.fix_text(text).encode('ascii', 'replace').decode('ascii'))
 		sents = [str(sent) for sent in doc.sents]
 		return self._post_process(*self.mm.extract_concepts(sents, range(1, len(sents) + 1), restrict_to_sources=src))
 

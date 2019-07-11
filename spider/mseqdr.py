@@ -23,7 +23,7 @@ import ftfy
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
-elif sys.platform.startswith('linux2'):
+elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 ANT_PATH = os.path.join(DATA_PATH, 'mseqdr')
 SC=';;'
@@ -133,7 +133,7 @@ class MSeqDRAPI(APIClient, object):
 		if (self.restype == 'html'):
 			parser = AnnotParser()
 			try:
-				parser.feed(ftfy.fix_text(response.data.decode('utf-8')).replace('</TD><TR><TR><TD>', '</TD></TR><TR><TD>'))
+				parser.feed(ftfy.fix_text(response.data.decode('utf-8', errors='replace')).replace('</TD><TR><TR><TD>', '</TD></TR><TR><TD>'))
 			except Exception as err:
 				print('Can not parse the response of API call!')
 				raise err
