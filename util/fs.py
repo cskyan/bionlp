@@ -9,8 +9,7 @@
 ###########################################################################
 #
 
-import os, re, sys, codecs
-from . import io
+import os, io, re, sys, codecs
 
 
 def mkdir(path):
@@ -20,7 +19,7 @@ def mkdir(path):
 
 
 def read_file(fpath, code='ascii'):
-	if (isinstance(fpath, io.StringIO) or isinstance(fpath, io.InputType)):
+	if (isinstance(fpath, io.StringIO)):
 		return fpath.readlines()
 	try:
 		data_str = []
@@ -48,7 +47,7 @@ def read_files(fpaths, code='ascii'):
 
 
 def write_file(content, fpath, code='ascii'):
-	if (isinstance(fpath, io.StringIO) or isinstance(fpath, io.OutputType)):
+	if (isinstance(fpath, io.StringIO)):
 		fpath.write(content)
 		return
 	try:
