@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, sys, copy, json, requests
+import os, sys, time, copy, json, requests
 requests.packages.urllib3.disable_warnings()
 from collections import OrderedDict
 from html.parser import HTMLParser
@@ -27,12 +27,12 @@ elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 UMLS_PATH = os.path.join(DATA_PATH, 'umls')
 API_KEY = '1fba7f61-e441-438d-b265-e000f7f18d4d'
-TGT = 'TGT-4276093-LF79MuODealQrT052l3GrWtvtHnuifupkaz0sfzHTlCVpV5jlh-cas'
+TGT = 'TGT-376970-QYy5MSSJkmasElP4YXFjMzn0JUy2CGe73LB3dLI62MNlJX0y0e-cas'
 
 
-def fetch_umls(cuis=[], info=None, **kwargs):
+def fetch_umls(ids=[], info=None, **kwargs):
 	client = UMLSAPI(apikey=API_KEY, function='concept')
-	res = [client.call(dict(cui=c, info=info), **kwargs) for c in cuis]
+	res = [client.call(dict(cui=uid, info=info), **kwargs) for uid in ids]
 	return [r['result'] for r in res]
 
 
@@ -100,7 +100,7 @@ class UMLSAPI(APIClient, object):
 			# return builder.build()
 			pass
 		elif (self.restype == 'json'):
-			if (response.status != 200): raise Exception()
+			if (response.status != 200): raise ConnectionError('Server error! Please wait a second and try again.')
 			return json.loads(ftfy.fix_text(response.data.decode('utf-8')).replace('\\', ''))
 
 	def request_tgt(self):
@@ -117,22 +117,41 @@ class UMLSAPI(APIClient, object):
 
 	def authenticate(self):
 		res = requests.post(UMLSAPI.TICKET_URL+self.tgt, data=dict(service=UMLSAPI.SERVICE_URL), headers={'content-type': 'application/x-www-form-urlencoded'})
-		if (res.status_code != 200): raise Exception('Cannot request a service ticket!')
+		if (res.status_code != 200): raise ConnectionError('Cannot request a service ticket!')
 		return res._content
 
-	def call(self, urlargs, **kwargs):
+	def call(self, urlargs, timeout=100, interval=5, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
 		args.update((k, v) for k, v in kwargs.items() if k in args)
-		args['ticket'] = self.authenticate()
+		elapsed, ret_error = 0, True
+		while ret_error and elapsed < timeout:
+			try:
+				args['ticket'] = self.authenticate()
+				self.request_tgt()
+				ret_error = False
+			except ConnectionError as e:
+				print(e)
+				time.sleep(interval)
+				elapsed += interval
 		urlparams = copy.deepcopy(self._url_param[self.function])
 		urlparams.update((k, v) for k, v in urlargs.items() if k in urlparams)
 		url = self.func_url + '/'.join(filter(None, urlparams.values()))
-		return APIClient.call(self, url, **args)
+		elapsed, ret_error = 0, True
+		while ret_error and elapsed < timeout:
+			try:
+				res = APIClient.call(self, url, **args)
+				ret_error = False
+			except ConnectionError as e:
+				print(e)
+				time.sleep(interval)
+				elapsed += interval
+		return {} if ret_error else res
 
 
 if __name__ == '__main__':
 	cuis = ['C1561643', 'C0007222']
-	print([c['name'] for c in fetch_umls(cuis=cuis)])
+	print([c['name'] for c in fetch_umls(ids=cuis)])
+	print([c for c in fetch_umls(ids=cuis, info='definitions')])
 	snomedct_us_ids = ['9468002', '204958008', '236403004']
 	print([c['name'] for c in fetch_snomedct_us(ids=snomedct_us_ids)])
 	msh_ids = ['D065710', 'C562884', 'D005155']
