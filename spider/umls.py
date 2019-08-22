@@ -17,8 +17,10 @@ from html.parser import HTMLParser
 import ftfy
 from apiclient import APIClient
 
-# from . import xmlextrc
-from bionlp.spider import xmlextrc
+from . import xmlextrc
+from ..util import func
+# from bionlp.spider import xmlextrc
+# from bionlp.util import func
 
 
 if sys.platform.startswith('win32'):
@@ -27,25 +29,25 @@ elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 UMLS_PATH = os.path.join(DATA_PATH, 'umls')
 API_KEY = '1fba7f61-e441-438d-b265-e000f7f18d4d'
-TGT = 'TGT-376970-QYy5MSSJkmasElP4YXFjMzn0JUy2CGe73LB3dLI62MNlJX0y0e-cas'
+TGT = 'TGT-2686604-cuqYfTFwTiM1Df1mk5ailAbSCarj6onqPG6DwbZplfcDOfe0bJ-cas'
 
 
 def fetch_umls(ids=[], info=None, **kwargs):
 	client = UMLSAPI(apikey=API_KEY, function='concept')
 	res = [client.call(dict(cui=uid, info=info), **kwargs) for uid in ids]
-	return [r['result'] for r in res]
+	return [r['result'] for r in res if 'result' in r]
 
 
 def fetch_snomedct_us(ids=[], info=None, **kwargs):
 	client = UMLSAPI(apikey=API_KEY, function='source')
 	res = [client.call(dict(source='SNOMEDCT_US', id=uid, info=info), **kwargs) for uid in ids]
-	return [r['result'] for r in res]
+	return [r['result'] for r in res if 'result' in r]
 
 
 def fetch_msh(ids=[], info=None, **kwargs):
 	client = UMLSAPI(apikey=API_KEY, function='source')
 	res = [client.call(dict(source='MSH', id=uid, info=info), **kwargs) for uid in ids]
-	return [r['result'] for r in res]
+	return [r['result'] for r in res if 'result' in r]
 
 
 class TGTParser(HTMLParser):
@@ -67,7 +69,7 @@ class TGTParser(HTMLParser):
 class UMLSAPI(APIClient, object):
 	BASE_URL = 'https://uts-ws.nlm.nih.gov/rest/'
 	APIKEY_URL = 'https://utslogin.nlm.nih.gov/cas/v1/api-key'
-	TICKET_URL = 'https://utslogin.nlm.nih.gov/cas/v1/api-key/'
+	TICKET_URL = 'https://utslogin.nlm.nih.gov/cas/v1/tickets/'
 	SERVICE_URL = 'http://umlsks.nlm.nih.gov'
 	_function_url = {'concept':'content/current/CUI/', 'source':'content/current/source/'}
 	_url_param = {'concept':OrderedDict(cui='', info=None), 'source':OrderedDict(source='', id='', info=None)}
@@ -82,6 +84,7 @@ class UMLSAPI(APIClient, object):
 		try:
 			self.authenticate()
 		except Exception as e:
+			print(e)
 			self.request_tgt()
 		self.function = function
 		self.func_url = self._function_url[function]
@@ -100,8 +103,17 @@ class UMLSAPI(APIClient, object):
 			# return builder.build()
 			pass
 		elif (self.restype == 'json'):
+			res = {}
 			if (response.status != 200): raise ConnectionError('Server error! Please wait a second and try again.')
-			return json.loads(ftfy.fix_text(response.data.decode('utf-8')).replace('\\', ''))
+			res_str = ftfy.fix_text(response.data.decode('utf-8')).replace('\\', '')
+			try:
+				res = func.load_json(res_str)
+			except json.JSONDecodeError as e:
+				print(e)
+				print('Cannot deserialize the json data:\n%s' % res_str)
+			except Exception as e:
+				print(e)
+			return res
 
 	def request_tgt(self):
 		res = requests.post(UMLSAPI.APIKEY_URL, data=dict(apikey=self.apikey))
@@ -127,12 +139,12 @@ class UMLSAPI(APIClient, object):
 		while ret_error and elapsed < timeout:
 			try:
 				args['ticket'] = self.authenticate()
-				self.request_tgt()
 				ret_error = False
 			except ConnectionError as e:
 				print(e)
 				time.sleep(interval)
 				elapsed += interval
+				self.request_tgt()
 		urlparams = copy.deepcopy(self._url_param[self.function])
 		urlparams.update((k, v) for k, v in urlargs.items() if k in urlparams)
 		url = self.func_url + '/'.join(filter(None, urlparams.values()))
