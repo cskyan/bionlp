@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, re, sys, logging, itertools
+import os, re, sys, logging, itertools, collections
 from operator import itemgetter
 from optparse import OptionParser
 
@@ -31,6 +31,7 @@ elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'ontolib')
 
 RDFS_LABEL_MAP = {('rdfs','label'):'lb'}
+RDFS_SUBCLS_MAP = {('rdfs','subClassOf'):'subcls'}
 OBOWL_REF_MAP = {('obowl', 'hasDbXref'): 'ref'}
 MESH_EQPRDC_MAP = {('meshv','concept'):'co', ('meshv','preferredConcept'):'pc', ('meshv','relatedConcept'):'rc', ('meshv','term'):'tm', ('meshv','preferredTerm'):'pt'}
 MESH_BTPRDC_MAP = {('meshv','broader'):'br', ('meshv','broaderConcept'):'bc', ('meshv','broaderDescriptor'):'bd'}
@@ -239,6 +240,31 @@ def get_ref(g, id, lang='', idns='', prdns=[], refprds=OBOWL_REF_MAP, revrel=Fal
 	q = prepareQuery(q_str, initNs=dict([('obowl', OBOWL)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
 	result = g.query(q)
 	return [row[0].toPython().lstrip(idns_str) if revrel else row[0].toPython() for row in result]
+
+
+def get_id_tree(g, id_regex=None, idns='', prdns=[], revrel=False, retree=False, retsubtree=False):
+	idns_str = str(idns)
+	idns = Namespace(idns_str)
+	prepareQuery = get_prepareq(g)
+	where_clause = 'FILTER regex(str(?cid), "%s")' % id_regex if id_regex and not id_regex.isspace() else ''
+	q_str = '''
+		SELECT DISTINCT ?cid ?pid WHERE {
+			%s .
+			?cid rdfs:subClassOf ?pid}
+		''' % (where_clause)
+	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
+	result = g.query(q)
+	rel_pairs = [[x.toPython().lstrip(idns_str) for x in row] if revrel else [x.toPython() for x in row] for row in result]
+	if not retree: return rel_pairs
+	from anytree import Node
+	all_nodes = collections.OrderedDict([])
+	for cid, pid in rel_pairs:
+		if pid not in all_nodes:
+			pnode = Node(pid)
+			all_nodes[pid] = pnode
+		cnode = Node(cid, parent=all_nodes[pid])
+		all_nodes[cid] = cnode
+	return all_nodes if retsubtree else all_nodes[list(all_nodes.keys())[0]]
 
 
 def slct_sim_terms(g, label, lang='en', exhausted=False, prdns=[], eqprds={}):
