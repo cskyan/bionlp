@@ -18,9 +18,9 @@ import ftfy
 from apiclient import APIClient
 
 from . import xmlextrc
-from ..util import func
+from ..util import io
 # from bionlp.spider import xmlextrc
-# from bionlp.util import func
+# from bionlp.util import io
 
 
 if sys.platform.startswith('win32'):
@@ -29,25 +29,25 @@ elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
 UMLS_PATH = os.path.join(DATA_PATH, 'umls')
 API_KEY = '1fba7f61-e441-438d-b265-e000f7f18d4d'
-TGT = 'TGT-2686604-cuqYfTFwTiM1Df1mk5ailAbSCarj6onqPG6DwbZplfcDOfe0bJ-cas'
+TGT = 'TGT-3223816-VpfyNkp4YtpLaF2dGbxY5ZRkdjvcprtnO2AbFCeon2QpyKOCUO-cas'
 
 
 def fetch_umls(ids=[], info=None, **kwargs):
 	client = UMLSAPI(apikey=API_KEY, function='concept')
 	res = [client.call(dict(cui=uid, info=info), **kwargs) for uid in ids]
-	return [r['result'] for r in res if 'result' in r]
+	return [r['result'] if 'result' in r else {} for r in res]
 
 
 def fetch_snomedct_us(ids=[], info=None, **kwargs):
 	client = UMLSAPI(apikey=API_KEY, function='source')
 	res = [client.call(dict(source='SNOMEDCT_US', id=uid, info=info), **kwargs) for uid in ids]
-	return [r['result'] for r in res if 'result' in r]
+	return [r['result'] if 'result' in r else {} for r in res]
 
 
 def fetch_msh(ids=[], info=None, **kwargs):
 	client = UMLSAPI(apikey=API_KEY, function='source')
 	res = [client.call(dict(source='MSH', id=uid, info=info), **kwargs) for uid in ids]
-	return [r['result'] for r in res if 'result' in r]
+	return [r['result'] if 'result' in r else {} for r in res]
 
 
 class TGTParser(HTMLParser):
@@ -73,7 +73,7 @@ class UMLSAPI(APIClient, object):
 	SERVICE_URL = 'http://umlsks.nlm.nih.gov'
 	_function_url = {'concept':'content/current/CUI/', 'source':'content/current/source/'}
 	_url_param = {'concept':OrderedDict(cui='', info=None), 'source':OrderedDict(source='', id='', info=None)}
-	_default_param = {'concept':dict(ticket=''), 'source':dict(ticket='')}
+	_default_param = {'concept':dict(ticket='', sabs=''), 'source':dict(ticket='', sabs='')}
 	_func_restype = {'concept':'json', 'source':'json'}
 	def __init__(self, apikey='', function='concept'):
 		if (function not in self._default_param):
@@ -107,7 +107,7 @@ class UMLSAPI(APIClient, object):
 			if (response.status != 200): raise ConnectionError('Server error! Please wait a second and try again.')
 			res_str = ftfy.fix_text(response.data.decode('utf-8')).replace('\\', '')
 			try:
-				res = func.load_json(res_str)
+				res = io.load_json(res_str)
 			except json.JSONDecodeError as e:
 				print(e)
 				print('Cannot deserialize the json data:\n%s' % res_str)

@@ -9,20 +9,28 @@
 ###########################################################################
 #
 
-import os, sys, subprocess
+import os, sys, time, subprocess
 from collections import OrderedDict
 
+import numpy as np
 import pandas as pd
 
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.preprocessing import MultiLabelBinarizer
 
-import ftfy
+import ftfy, spacy
+try:
+    nlp = spacy.load('en_core_sci_md')
+except Exception as e:
+    print(e)
+    try:
+        nlp = spacy.load('en_core_sci_sm')
+    except Exception as e:
+        print(e)
+        nlp = spacy.load('en_core_web_sm')
 
-from .. import nlp
-from ..util import fs, io, oo, func
-# from bionlp import nlp
-# from bionlp.util import fs, io, oo, func
+# from ..util import fs, io, oo, func
+from bionlp.util import fs, io, oo, func
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\ontolib\\store'
@@ -34,15 +42,27 @@ SC=';;'
 ONTO_MAPS = {'HP':'HPO'}
 
 
-def annotext(text, ontos=[]):
+def annotext(text, ontos=[], max_trail=-1):
+	trail = 0
+	while max_trail <= 0 or trail < max_trail:
+		try:
+			client = Wrapper()
+			res = client.raw_parse(text, src=[ONTO_MAPS[x] for x in ontos])
+			break
+		except Exception as e:
+			print(e)
+			Wrapper.restart_service()
+			time.sleep(3)
+			client = Wrapper()
+			trail += 1
+	ret_data = []
 	try:
-		client = Wrapper()
-	except Exception as e:
+		ret_data = [dict(id=concept.cui, loc=[tuple(np.cumsum(list(map(int, x.strip('[]').split('/'))))-1+concept.sent_offset) for y in concept.pos_info.split(';') for x in y.split(',') if x != 'TX'], score=float(concept.score)) for concept in func.flatten_list(list(res[0].values())) if hasattr(concept, 'cui')]
+	except ValueError as e:
 		print(e)
-		Wrapper.start_service()
-		client = Wrapper()
-	res = client.raw_parse(text, src=[ONTO_MAPS[x] for x in ontos])
-	return [dict(id=concept.cui, score=concept.score) for concept in func.flatten_list(list(res[0].values())) if hasattr(concept, 'cui')]
+		print(res[0].values())
+		raise e
+	return ret_data
 
 
 class Wrapper():
@@ -86,18 +106,18 @@ class Wrapper():
 	def __exit__(self, type, value, traceback):
 		Wrapper.stop_service()
 
-	def _post_process(self, concepts, error):
+	def _post_process(self, sent_offset, concepts, error):
 		result = OrderedDict()
 		for concept in concepts:
-			result.setdefault(int(concept.index) - 1, []).append(concept)
+			sent_id = int(concept.index) - 1
+			concept.sent_offset = sent_offset[sent_id]
+			result.setdefault(sent_id, []).append(concept)
 		return result, error
 
 	def raw_parse(self, text, src=[]):
-		import spacy
-		spacy_nlp = spacy.load('en_core_web_sm')
-		doc = spacy_nlp(ftfy.fix_text(text).encode('ascii', 'replace').decode('ascii'))
-		sents = [str(sent) for sent in doc.sents]
-		return self._post_process(*self.mm.extract_concepts(sents, range(1, len(sents) + 1), restrict_to_sources=src))
+		doc = nlp(ftfy.fix_text(text).encode('ascii', 'replace').decode('ascii'))
+		sents, sent_offset = zip(*[(str(sent), sent[0].idx) for sent in doc.sents])
+		return self._post_process(sent_offset, *self.mm.extract_concepts(sents, range(1, len(sents) + 1), restrict_to_sources=src))
 
 	def parse(self, tokens):
 		return self._post_process(*self.mm.extract_concepts(tokens, range(1, len(tokens) + 1)))
