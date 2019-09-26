@@ -90,3 +90,9 @@ def traverse(path):
 		for file in files:
 			fpath = os.path.join(root, file)
 			yield fpath
+
+def count_lines(fpath):
+	import subprocess, shlex
+	wc = subprocess.Popen(shlex.split('wc -l %s' % fpath), stdout=subprocess.PIPE)
+	num_lines = int(wc.communicate()[0].split()[0])
+	return num_lines
