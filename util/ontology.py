@@ -16,6 +16,7 @@ from optparse import OptionParser
 import numpy as np
 import scipy as sp
 from scipy.sparse import coo_matrix
+import pandas as pd
 
 from rdflib import Graph, Namespace
 from rdflib.plugins.sparql import prepareQuery as rprepareq
@@ -251,10 +252,24 @@ def get_id_tree(g, id_regex=None, idns='', prdns=[], revrel=False, retree=False,
 		SELECT DISTINCT ?cid ?pid WHERE {
 			%s .
 			?cid rdfs:subClassOf ?pid}
+		ORDER BY ?pid
 		''' % (where_clause)
 	q = prepareQuery(q_str, initNs=dict([('rdfs', RDFS)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
 	result = g.query(q)
 	rel_pairs = [[x.toPython().lstrip(idns_str) for x in row] if revrel else [x.toPython() for x in row] for row in result]
+	cids, pids = zip(*rel_pairs)
+	rel_srs = pd.Series(pids, index=cids, name='pid')
+	rel_dict = dict(list(rel_srs.groupby(rel_srs)))
+	fixed_pids = [pids[0]]
+	last_fixed = [rel_dict[pids[0]]]
+	while last_fixed:
+	    new_last_fixed = []
+	    for lfrd in last_fixed:
+	        cur_pids = [idx for idx in lfrd.index if idx in rel_dict]
+	        fixed_pids.extend(cur_pids)
+	        new_last_fixed.extend([rel_dict[pid] for pid in cur_pids])
+	    last_fixed = new_last_fixed
+	rel_pairs = list(itertools.chain.from_iterable([list(rel_dict[pid].items()) for pid in fixed_pids]))
 	if not retree: return rel_pairs
 	from anytree import Node
 	all_nodes = collections.OrderedDict([])
