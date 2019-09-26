@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, sys, yaml, json, time, errno, pickle
+import os, re, sys, yaml, json, time, errno, pickle
 
 import numpy as np
 import pandas as pd
@@ -34,6 +34,51 @@ def read_json(fpath):
 def parse_json(json_str):
 	fp = io.StringIO(json_str)
 	return json.load(fp)
+
+
+def load_json(json_str):
+	def lj(json_str):
+		try:
+			return json.loads(json_str), True
+		except Exception as e:
+			print(e)
+			unexp = int(re.findall(r'\(char (\d+)\)', str(e))[0])
+			unesc = json_str.rfind(r'"', 0, unexp)
+			json_str = json_str[:unesc] + r'\"' + json_str[unesc+1:]
+			closg = json_str.find(r'"', unesc + 2)
+			json_str = json_str[:closg] + r'\"' + json_str[closg+1:]
+			return json_str, False
+	import gc
+	trials, interval = 0, max(1, 3e5 / len(json_str))
+	while True:
+		result, code = lj(json_str)
+		if code: break
+		del json_str
+		json_str = result
+		trials += 1
+		if trials % interval == 0: gc.collect()
+	return result
+
+# def load_json(json_str):
+# 	import gc
+# 	trials, interval = 0, max(1, 3e5 / len(json_str))
+# 	while True:
+# 		try:
+# 			result = json.loads(json_str)
+# 			gc.collect()
+# 			break
+# 		except Exception as e:
+# 			print(e)
+# 			unexp = int(re.findall(r'\(char (\d+)\)', str(e))[0])
+# 			unesc = json_str.rfind(r'"', 0, unexp)
+# 			new_json_str = json_str[:unesc] + r'\"' + json_str[unesc+1:]
+# 			del json_str
+# 			closg = new_json_str.find(r'"', unesc + 2)
+# 			json_str = new_json_str[:closg] + r'\"' + new_json_str[closg+1:]
+# 			del new_json_str
+# 			trials += 1
+# 			if trials % interval == 0: gc.collect()
+# 	return result
 
 
 def write_obj(obj, fpath='obj'):

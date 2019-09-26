@@ -63,21 +63,6 @@ def strsim(a, b):
 	return difflib.SequenceMatcher(None, a, b).ratio()
 
 
-def load_json(json_str):
-    while True:
-        try:
-            result = json.loads(json_str)
-            break
-        except Exception as e:
-            print(e)
-            unexp = int(re.findall(r'\(char (\d+)\)', str(e))[0])
-            unesc = json_str.rfind(r'"', 0, unexp)
-            json_str = json_str[:unesc] + r'\"' + json_str[unesc+1:]
-            closg = json_str.find(r'"', unesc + 2)
-            json_str = json_str[:closg] + r'\"' + json_str[closg+1:]
-    return result
-
-
 def alignstrs(str_list, ref_list, ret_all=True, ret_idx=False):
 	str_set, ref_set = set(str_list), set(ref_list)
 	overlap = str_set & ref_set
