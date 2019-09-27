@@ -9,10 +9,12 @@
 ###########################################################################
 #
 
-import os, sys, codecs, urllib
+import os, sys, time, codecs, urllib
 
-from ..util import fs
-from . import xmlextrc
+# from ..util import fs
+# from . import xmlextrc
+from bionlp.util import fs
+from bionlp.spider import xmlextrc
 
 if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
@@ -27,7 +29,7 @@ class PubMedBuilder():
 	def __init__(self):
 		self._tag = ''
 		self._tag_stack = []
-		self.id = ''
+		self.pmid = ''
 		self.journal = ''
 		self.year = ''
 		self.title = ''
@@ -40,6 +42,7 @@ class PubMedBuilder():
 	def start(self, tag, attrib):
 		self._tag = tag
 		self._tag_stack.append(self._tag)
+		self._tag_attrib = attrib
 		# Process the attributes
 
 	def end(self, tag):
@@ -51,7 +54,7 @@ class PubMedBuilder():
 		data = data.strip()
 		# Process the text content
 		if (self._tag == 'PMID'):
-			self.id = data
+			self.pmid = data
 		if (self._tag == 'Title' and self._tag_stack[-2] == 'Journal'):
 			self.journal = data
 		if (self._tag == 'Year' and self._tag_stack[-2] == 'PubDate'):
@@ -65,22 +68,77 @@ class PubMedBuilder():
 			self.keywords.append(data)
 		if (self._tag == 'DescriptorName'):
 			if (self._tag_stack[-2] == 'MeshHeading'):
-				self.mesh_headings.append(data)
+				self.mesh_headings.append((self._tag_attrib['UI'], data))
 		if (self._tag == 'NameOfSubstance'):
 			if (self._tag_stack[-2] == 'Chemical'):
-				self.chemicals.append(data)
+				self.chemicals.append((self._tag_attrib['UI'], data))
 
 	def close(self):
 		pass
 
 	def build(self):
-		return {'title':self.title, 'abs':'\n'.join(self.abs_list).strip(), 'kws':SC.join(self.keywords), 'mesh':self.mesh_headings, 'chem':self.chemicals}
+		return {'pmid':self.pmid, 'title':self.title, 'abs':'\n'.join(self.abs_list).strip(), 'kws':SC.join(self.keywords), 'mesh':self.mesh_headings, 'chem':self.chemicals}
+
+
+class PubMedInfoBuilder():
+	def __init__(self):
+		self._tag = ''
+		self._tag_stack = []
+		self.name = None
+		self.number = None
+		self.last_update = None
+		self.properties = []
+		self.links = []
+
+	def start(self, tag, attrib):
+		self._tag = tag
+		self._tag_stack.append(self._tag)
+		self._tag_attrib = attrib
+		# Process the attributes
+
+	def end(self, tag):
+		self._tag_stack.pop()
+
+	def data(self, data):
+		if data.isspace():
+			return
+		data = data.strip()
+		# Process the text content
+		if (self._tag == 'MenuName' and self._tag_stack[-2] == 'DbInfo'):
+			self.name = data
+		if (self._tag == 'Count' and self._tag_stack[-2] == 'DbInfo'):
+			self.number = int(data)
+		if (self._tag == 'LastUpdate' and self._tag_stack[-2] == 'DbInfo'):
+			self.last_update = data
+
+	def close(self):
+		pass
+
+	def build(self):
+		return {'name':self.name, 'number':self.number, 'last_update':self.last_update}
+
+
+def get_pubmed_info():
+	url = BASE_URL + "einfo.fcgi?db=pubmed"
+	res = urllib.request.urlopen(url).read()
+	builder = PubMedInfoBuilder()
+	parser = xmlextrc.get_parser(builder)
+	parser.feed(res)
+	return builder.build()
 
 
 def get_pmids(ss, max_num=1000):
 	url = BASE_URL + "esearch.fcgi?db=pubmed&term=" + urllib.parse.quote(ss) + "&rettype=abstract&retmode=text&usehistory=y&retmax=%i" % (max_num)
 	print("Search String:\n" + url + '\n')
-	res = urllib.request.urlopen(url).read()
+	trail = 0
+	while max_trail <= 0 or trail < max_trail:
+		try:
+			res = urllib.request.urlopen(url).read()
+			break
+		except Exception as e:
+			print(e)
+			time.sleep(1)
+			trail += 1
 
 	pmid_list = xmlextrc.extrc_list('IdList', 'Id', '.', None, res, 'text')
 	print("Number of obtained pmids: %i\n" % len(pmid_list))
@@ -91,7 +149,15 @@ def fetch_abs(pmid_list, saved_path=ABS_PATH):
 	fs.mkdir(saved_path)
 	url = BASE_URL + "efetch.fcgi?db=pubmed&retmode=xml&id=" + ','.join(pmid_list)
 	print("Fetch String:\n" + url + '\n')
-	res = urllib.request.urlopen(url).read()
+	trail = 0
+	while max_trail <= 0 or trail < max_trail:
+		try:
+			res = urllib.request.urlopen(url).read()
+			break
+		except Exception as e:
+			print(e)
+			time.sleep(1)
+			trail += 1
 
 	abs_tree = xmlextrc.extrc_list('PubmedArticleSet', 'PubmedArticle', './MedlineCitation/Article/Abstract', None, res, 'elem')
 	abs_text = []
@@ -105,10 +171,18 @@ def fetch_abs(pmid_list, saved_path=ABS_PATH):
 	return abs_text
 
 
-def fetch_artcls(pmid_list, saved_path=DATA_PATH):
+def fetch_artcls(pmid_list, saved_path=DATA_PATH, max_trail=-1):
 	url = BASE_URL + "efetch.fcgi?db=pubmed&retmode=xml&id=" + ','.join(pmid_list)
 	print("Fetch String:\n" + url + '\n')
-	res = urllib.request.urlopen(url).read()
+	trail = 0
+	while max_trail <= 0 or trail < max_trail:
+		try:
+			res = urllib.request.urlopen(url).read()
+			break
+		except Exception as e:
+			print(e)
+			time.sleep(1)
+			trail += 1
 
 	artcl_xml = xmlextrc.extrc_list('PubmedArticleSet', 'PubmedArticle', '.', None, res, 'xml')
 	articles = []
@@ -125,8 +199,13 @@ def fetch_artcls(pmid_list, saved_path=DATA_PATH):
 		for id, artcls in zip(pmid_list, articles):
 			for f, a in feat_attr.items():
 				if (hasattr(artcls[f], '__iter__')):
-					attr_text = '\n'.join(artcls[f])
+					attr_text = '\n'.join([':'.join(x) for x in artcls[f]] if artcls[f] and type(artcls[f][0]) is tuple else artcls[f])
 				else:
 					attr_text = artcls[f]
 				fs.write_file(attr_text, os.path.join(saved_path, a[0], str(id)+'.'+a[1]), code='utf8')
 	return articles
+
+
+if __name__ == '__main__':
+	print(get_pubmed_info())
+	print(fetch_artcls(['205546'], saved_path=None))
