@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, re, sys, logging, itertools, collections
+import os, re, sys, logging, operator, itertools, collections
 from operator import itemgetter
 from optparse import OptionParser
 
@@ -44,6 +44,7 @@ XSD = Namespace('http://www.w3.org/2001/XMLSchema#')
 OWL = Namespace('http://www.w3.org/2002/07/owl#')
 MESHV = Namespace('http://id.nlm.nih.gov/mesh/vocab#')
 OBO = Namespace('http://purl.obolibrary.org/obo/')
+MONDO = Namespace('http://purl.obolibrary.org/obo/mondo#')
 OBOWL = Namespace('http://www.geneontology.org/formats/oboInOwl#')
 OMIM = Namespace('http://identifiers.org/omim/')
 DBID = Namespace('http://www.drugbank.ca/drugbank-id/')
@@ -233,7 +234,7 @@ def get_ref(g, id, lang='', idns='', prdns=[], refprds=OBOWL_REF_MAP, revrel=Fal
 	q_str = '''
 		SELECT DISTINCT ?x WHERE {
 			%s .
-			FILTER langMatches(lang(?c), "%s")}
+			FILTER langMatches(lang(?x), "%s")}
 		''' % (where_clause, lang) if lang and not lang.isspace() else '''
 		SELECT DISTINCT ?x WHERE {
 			%s .}
@@ -241,6 +242,55 @@ def get_ref(g, id, lang='', idns='', prdns=[], refprds=OBOWL_REF_MAP, revrel=Fal
 	q = prepareQuery(q_str, initNs=dict([('obowl', OBOWL)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
 	result = g.query(q)
 	return [row[0].toPython().lstrip(idns_str) if revrel else row[0].toPython() for row in result]
+
+
+def get_prds(g, id_regex=None, lang='', idns=''):
+	idns_str = str(idns)
+	idns = Namespace(idns_str)
+	prepareQuery = get_prepareq(g)
+	lang_clause = 'FILTER langMatches(lang(?label), "%s") .' % lang if lang and not lang.isspace() else ''
+	id_clause = 'FILTER regex(str(?id), "%s") .' % id_regex if id_regex and not id_regex.isspace() else ''
+	q_str = '''
+		SELECT DISTINCT ?predicate WHERE {
+			%s
+			?id rdfs:label ?label .
+			?id ?predicate ?object .
+			%s
+		}
+		ORDER BY ?predicate
+		''' % (id_clause, lang_clause)
+	q = prepareQuery(q_str, initNs=dict([('obo', OBO), ('rdfs', RDFS)]+([] if idns_str.isspace() else [('idns', idns)])))
+	result = g.query(q)
+	res = [row[0].toPython() for row in result]
+	return [(lambda x: (x[-1], Namespace(x[0]+'#')))(r.split('#')) if '#' in r else (lambda x: (x[-1], Namespace('/'.join(x[:-1])+'/')))(r.split('/')) for r in res]
+
+
+def get_objs(g, predicates, id_regex=None, lang='', idns='', prdns=[], revrel=False, internal=False):
+	idns_str = str(idns)
+	idns = Namespace(idns_str)
+	prepareQuery = get_prepareq(g)
+	# pred_clause = 'BIND("{0}" AS ?predicate) .'if len(predicates) > 1 else ''
+	pred_clause = 'VALUES ?predicate {{ "{0}" }} .'if len(predicates) > 1 else ''
+	where_clause = ' UNION '.join(['''{?object %s ?id . %s}''' % (':'.join(p), pred_clause.format(p[1])) if revrel else '''{?id %s ?object . %s}''' % (':'.join(p), pred_clause.format(p[1])) for p in predicates.keys()])
+	lang_clause = 'FILTER langMatches(lang(?label), "%s") .' % lang if lang and not lang.isspace() else ''
+	id_clause = 'FILTER regex(str(?id), "%s") .' % id_regex if id_regex and not id_regex.isspace() else ''
+	obj_clause = '?object rdfs:label ?object_label .' if internal else ''
+	q_str = '''
+		SELECT DISTINCT ?id ?label ?predicate ?object ?object_label WHERE {
+			%s
+			%s .
+			?id rdfs:label ?label .
+			%s
+			%s
+		}
+		ORDER BY ?id
+		''' % (id_clause, where_clause, lang_clause, obj_clause)
+	q = prepareQuery(q_str, initNs=dict([('obo', OBO), ('rdfs', RDFS)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
+	result = g.query(q)
+	# res = [[col.toPython().replace(idns_str, '') for col in row] for row in result]
+	res = [[re.sub(r'|'.join(map(re.escape, [idns]+list(map(operator.itemgetter(1), prdns)))), '', col.toPython()) for col in row] for row in result]
+	return pd.DataFrame(res, columns=['id', 'label'] + (['predicate'] if len(predicates) > 1 else []) + ['object'] + (['object_label'] if internal else []))
+
 
 
 def get_id_tree(g, id_regex=None, idns='', prdns=[], revrel=False, retree=False, retsubtree=False):
