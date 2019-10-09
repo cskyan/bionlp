@@ -119,12 +119,17 @@ class PubMedInfoBuilder():
 
 
 def get_pubmed_info():
+	import datetime, json
+	now = datetime.datetime.now()
 	url = BASE_URL + "einfo.fcgi?db=pubmed"
 	res = urllib.request.urlopen(url).read()
 	builder = PubMedInfoBuilder()
 	parser = xmlextrc.get_parser(builder)
 	parser.feed(res)
-	return builder.build()
+	res = builder.build()
+	with open('pubmed_info_%d%d%d.json' % (now.year, now.month, now.day), 'w') as fd:
+		json.dump(res, fd)
+	return res
 
 
 def get_pmids(ss, max_num=1000):
