@@ -96,3 +96,28 @@ def count_lines(fpath):
 	wc = subprocess.Popen(shlex.split('wc -l %s' % fpath), stdout=subprocess.PIPE)
 	num_lines = int(wc.communicate()[0].split()[0])
 	return num_lines
+
+def read_last_line(fpath):
+	with open(fpath, 'rb') as fd:
+	    offset = -100
+	    while True:
+	        fd.seek(offset, 2)
+	        lines = fd.readlines()
+	        if len(lines) > 1:
+	            last = lines[-1]
+	            break
+	        offset *= 2
+	return last.decode()
+
+def read_firstlast_line(fpath):
+	with open(fpath, 'rb') as fd:
+	    first = next(fd)
+	    offset = -100
+	    while True:
+	        fd.seek(offset, 2)
+	        lines = fd.readlines()
+	        if len(lines) > 1:
+	            last = lines[-1]
+	            break
+	        offset *= 2
+	return first.decode(), last.decode()
