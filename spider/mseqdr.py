@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, re, sys, json, copy, requests
+import os, re, sys, copy, time, json, requests
 from html.parser import HTMLParser
 
 import pandas as pd

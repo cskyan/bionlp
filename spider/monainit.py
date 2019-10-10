@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, sys, json, copy, urllib3
+import os, sys, json, copy, time, urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from html.parser import HTMLParser
