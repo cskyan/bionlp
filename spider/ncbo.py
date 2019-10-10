@@ -73,11 +73,20 @@ class NCBOAPI(APIClient, object):
 				res_json = {}
 			return res_json
 
-	def call(self, **kwargs):
+	def call(self, max_trail=-1, interval=3, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
 		args['apikey'] = self.apikey
 		args.update((k, v) for k, v in kwargs.items() if k in args)
-		return APIClient.call(self, '/%s' % self.func_url, **args)
+		trail = 0
+		while max_trail <= 0 or trail < max_trail:
+			try:
+				res = APIClient.call(self, '/%s' % self.func_url, **args)
+				break
+			except Exception as e:
+				print(e)
+				time.sleep(interval)
+				trail += 1
+		return res
 
 if __name__ == '__main__':
 	text = 'Melanoma is a malignant tumor of melanocytes which are found predominantly in skin but also in the bowel and the eye.'

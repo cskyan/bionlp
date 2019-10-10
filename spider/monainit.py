@@ -132,10 +132,19 @@ class MonaInitSciGraphAPI(APIClient, object):
 		elif (self.restype == 'json'):
 			return json.loads(ftfy.fix_text(response.data.decode('utf-8', errors='replace')).replace('\\', ''))
 
-	def call(self, **kwargs):
+	def call(self, max_trail=-1, interval=3, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
 		args.update((k, v) for k, v in kwargs.items() if k in args)
-		return APIClient.call(self, '/%s' % self.func_url, **args)
+		trail = 0
+		while max_trail <= 0 or trail < max_trail:
+			try:
+				res = APIClient.call(self, '/%s' % self.func_url, **args)
+				break
+			except Exception as e:
+				print(e)
+				time.sleep(interval)
+				trail += 1
+		return res
 
 
 class MonaInitBioLinkAPI(APIClient, object):
@@ -169,11 +178,20 @@ class MonaInitBioLinkAPI(APIClient, object):
 		else:
 			return {}
 
-	def call(self, args, **kwargs):
+	def call(self, args, max_trail=-1, interval=3, **kwargs):
 		num_args, kw_args = copy.deepcopy(self._default_param[self.function])
 		if num_args > len(args): raise ValueError('Insufficient number of positional parameters for API %s' % MonaInitBioLinkAPI.BASE_URL + self.func_url)
 		kw_args.update((k, v) for k, v in kwargs.items() if k in kw_args)
-		return APIClient.call(self, self.func_url.format(*args[:num_args]), **kw_args)
+		trail = 0
+		while max_trail <= 0 or trail < max_trail:
+			try:
+				res = APIClient.call(self, self.func_url.format(*args[:num_args]), **kw_args)
+				break
+			except Exception as e:
+				print(e)
+				time.sleep(interval)
+				trail += 1
+		return res
 
 
 if __name__ == '__main__':
