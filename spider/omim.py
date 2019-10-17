@@ -19,7 +19,9 @@ import ftfy
 # from ..util import ontology
 # from bionlp.util import ontology
 # from ..util import io
+# import xmlextrc
 from bionlp.util import io
+from bionlp.spider import xmlextrc
 
 
 if sys.platform.startswith('win32'):
@@ -33,8 +35,50 @@ SC=';;'
 
 def omim_refs(omim_ids):
 	client = OMIMAPI(function='entref')
+	unique_omim_ids = set(omim_ids)
+	print('Querying publications for OMIM ids: %s' % ', '.join(unique_omim_ids))
+	sys.stdout.flush()
 	res = [client.call(mimNumber=omimid) for omimid in omim_ids]
-	return [[ref['reference']['pubmedID'] for refs in r['omim']['referenceLists'] for ref in refs['referenceList'] if 'pubmedID' in ref['reference']] for r in res]
+	res_map = dict(zip(unique_omim_ids, [[ref['reference']['pubmedID'] for refs in r['omim']['referenceLists'] for ref in refs['referenceList'] if 'pubmedID' in ref['reference']] if r else [] for r in res]))
+	return [res_map[omimid] for omimid in omim_ids]
+
+
+class RefBuilder():
+	def __init__(self):
+		self._tag = ''
+		self._tag_stack = []
+		self.referenceLists = []
+		self._referenceList = []
+		self._ref = {}
+
+	def start(self, tag, attrib):
+		self._tag = tag
+		self._tag_stack.append(self._tag)
+		if (self._tag == 'referenceList'):
+			self._referenceList = []
+		if (self._tag == 'reference'):
+			self._ref = {}
+
+	def end(self, tag):
+		self._tag = tag
+		self._tag_stack.pop()
+		if (self._tag == 'referenceList'):
+			self.referenceLists.append(self._referenceList)
+		if (self._tag == 'reference'):
+			self._referenceList.append(self._ref)
+
+	def data(self, data):
+		if data.isspace(): return
+		data = data.strip()
+		# Process the text content
+		if (self._tag == 'pubmedID' and self._tag_stack[-2] == 'reference'):
+			self._ref['pmid'] = data
+
+	def build(self):
+		return {'omim':{'referenceLists':[{'referenceList':[{'reference':ref} for ref in refs]} for refs in self.referenceLists]}}
+
+
+BUILDER_MAP = {'entref':RefBuilder}
 
 
 class OMIMAPI(APIClient, object):
@@ -42,7 +86,7 @@ class OMIMAPI(APIClient, object):
 	BASE_URL = 'https://api.omim.org/api'
 	_function_url = {'entref':'/entry/referenceList'}
 	_default_param = {'entref':dict(apiKey=API_KEY, format='json', mimNumber='')}
-	_func_restype = {'entref':'json'}
+	_func_restype = {'entref':'xml'}
 
 	def __init__(self, function='entref'):
 		if (function not in self._default_param):
@@ -65,6 +109,17 @@ class OMIMAPI(APIClient, object):
 			except Exception as e:
 				print(e)
 			return res
+		elif (self.restype == 'xml'):
+			Builder = BUILDER_MAP[self.function]
+			builder = Builder()
+			parser = xmlextrc.get_parser(builder)
+			try:
+				parser.feed(response.data.decode('utf-8'))
+			except Exception as err:
+				print('Can not parse the response of API call!')
+				raise err
+			parser.close()
+			return builder.build()
 		else:
 			return {}
 
@@ -78,6 +133,7 @@ class OMIMAPI(APIClient, object):
 				break
 			except Exception as e:
 				print(e)
+				sys.stdout.flush()
 				time.sleep(interval)
 				trail += 1
 		return res
