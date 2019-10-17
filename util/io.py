@@ -36,7 +36,7 @@ def parse_json(json_str):
 	return json.load(fp)
 
 
-def load_json(json_str):
+def load_json(json_str, max_trail=20):
 	def lj(json_str):
 		try:
 			return json.loads(json_str), True
@@ -50,13 +50,14 @@ def load_json(json_str):
 			return json_str, False
 	import gc
 	trials, interval = 0, max(1, 3e5 / len(json_str))
-	while True:
+	while max_trail <= 0 or trials < max_trail:
 		result, code = lj(json_str)
 		if code: break
 		del json_str
 		json_str = result
 		trials += 1
 		if trials % interval == 0: gc.collect()
+	if not code: raise Exception('Cannot fix the json string:\n%s' % json_str)
 	return result
 
 # def load_json(json_str):
