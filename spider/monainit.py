@@ -40,6 +40,7 @@ def annotext(text, ontos=[]):
 
 def phenopubs(pheno_ids, ontos=[]):
 	client = MonaInitBioLinkAPI(function='phenopub')
+	print('Querying publications for phenotypes: %s' % pheno_ids)
 	res = [client.call(args=[phnid.replace('_', ':')]) for phnid in pheno_ids]
 	# pheno_pubs = [[(r['subject']['id'].replace(':', '_'), pub['id']) for r in rs['associations'] for pub in r['publications']] for rs in res]
 	pheno_pubs = [[(r['subject']['id'].replace(':', '_'), r['object']['id'], len(set([e['sub'] for e in r['evidence_graph']['edges'] if e['sub'].startswith('MONARCH')]))) for r in rs['associations']] for rs in res]
@@ -48,6 +49,7 @@ def phenopubs(pheno_ids, ontos=[]):
 
 def phenodzs(pheno_ids, ontos=[]):
 	client = MonaInitBioLinkAPI(function='phenodz')
+	print('Querying diseases for phenotypes: %s' % pheno_ids)
 	res = [client.call(args=[phnid.replace('_', ':')]) for phnid in pheno_ids]
 	pheno_dzs = [[(r['subject']['id'].replace(':', '_'), r['object']['id'], len(set([e['sub'] for e in r['evidence_graph']['edges'] if e['sub'].startswith('MONARCH')]))) for r in rs['associations']] for rs in res]
 	pheno_dzs = [[pairs for pairs in r if any([pairs[0].startswith(onto.upper()) for onto in ontos])] for r in pheno_dzs] if len(ontos) > 0 else pheno_dzs
@@ -56,6 +58,7 @@ def phenodzs(pheno_ids, ontos=[]):
 
 def pubphenos(pmids, ontos=[]):
 	client = MonaInitBioLinkAPI(function='pubpheno')
+	print('Querying phenotypes for PMID: %s' % pmids)
 	res = [client.call(args=['PMID:%s' % pmid]) for pmid in pmids]
 	pub_phenos = [[(r['subject']['id'], r['object']['id'], len(set([n['id'] for n in r['evidence_graph']['nodes'] if n['id'].startswith('MONARCH')]))) for r in rs['associations']] for rs in res]
 	pub_phenos = [[pairs for pairs in r if any([pairs[1].startswith(onto.upper()) for onto in ontos])] for r in pub_phenos] if len(ontos) > 0 else pub_phenos

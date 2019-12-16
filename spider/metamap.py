@@ -43,7 +43,7 @@ ONTO_MAPS = {'HP':'HPO'}
 
 
 def annotext(text, ontos=[], max_trail=-1):
-	trail = 0
+	trail, res = 0, []
 	while max_trail <= 0 or trail < max_trail:
 		try:
 			client = Wrapper()
@@ -55,6 +55,7 @@ def annotext(text, ontos=[], max_trail=-1):
 			time.sleep(3)
 			client = Wrapper()
 			trail += 1
+	if len(res) == 0: return []
 	ret_data = []
 	try:
 		ret_data = [dict(id=concept.cui, loc=[tuple(np.cumsum(list(map(int, x.strip('[]').split('/'))))-1+concept.sent_offset) for y in concept.pos_info.split(';') for x in y.split(',') if x != 'TX'], score=float(concept.score)) for concept in func.flatten_list(list(res[0].values())) if hasattr(concept, 'cui')]
