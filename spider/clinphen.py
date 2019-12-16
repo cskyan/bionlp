@@ -14,9 +14,10 @@ from io import StringIO
 
 import pandas as pd
 
-import clinphen
 import ftfy
 
+from ..ext import clinphen
+# from bionlp.ext import clinphen
 # from ..util import ontology
 # from bionlp.util import ontology
 
