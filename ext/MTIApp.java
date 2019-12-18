@@ -12,6 +12,7 @@ import java.nio.file.Paths;
 import java.io.FileWriter;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.util.Scanner;
 import java.util.Arrays;
 
 import py4j.GatewayServer;
@@ -114,11 +115,19 @@ public class MTIApp {
     }
 
     public static void main(String[] args) {
+        GatewayServer gatewayServer;
         if (args.length < 2) {
-            System.out.println("Please input your username, password and email address separated by white space!");
-            System.exit(1);
+            Scanner in = new Scanner(System.in);
+            System.out.println("Please input your username:");
+            String username = in.nextLine();
+            System.out.println("Please input your password:");
+            String password = in.nextLine();
+            System.out.println("Please input your email:");
+            String email = in.nextLine();
+            gatewayServer = new GatewayServer(new MTIApp(username, password, email.trim().isEmpty() ? "abc@example.com" : email));
+        } else {
+            gatewayServer = new GatewayServer(new MTIApp(args[0], args[1], args.length>2 ? args[2] : "abc@example.com"));
         }
-        GatewayServer gatewayServer = new GatewayServer(new MTIApp(args[0], args[1], args.length>2 ? args[2] : "abc@example.com"));
         gatewayServer.start();
         System.out.println("MTI Gateway Server Started");
     }
