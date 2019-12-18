@@ -39,16 +39,19 @@ SC=';;'
 
 
 def annotext(text, ontos=[], cache_path='.cache', encoding='ascii'):
-	timestamp = int(datetime.timestamp(datetime.now()))
+	timestamp = str(os.getpid()) + str(datetime.timestamp(datetime.now())).replace('.', '')
 	fs.mkdir(cache_path)
 	inpath = os.path.join(cache_path, '%s.in' % timestamp)
 	fs.write_file(text, inpath, encoding)
-	df = pd.read_csv(StringIO(GATEWAY.entry_point.get_result(os.path.abspath(inpath))), sep='|', header=None, error_bad_lines=False)
 	try:
-		res = [dict(id=r[2], loc=tuple(np.cumsum(list(map(int, r[8].split('^')[:2])))), name=r[5].lstrip('RtM via: ').split(';')[0] if type(r[5]) is str else '', text=r[1].lstrip('*') if type(r[1]) is str else '') for i, r in df.iterrows()]
+		df = pd.read_csv(StringIO(_fix_restext(GATEWAY.entry_point.get_result(os.path.abspath(inpath)))), sep='|', header=None)
+		res = [dict(id=r[2], loc=tuple(np.cumsum(list(map(int, r[8].split('^')[:2])))) if type(r[8]) is str and not r[8].isspace else None, name=r[5].lstrip('RtM via: ').split(';')[0] if type(r[5]) is str else '', text=r[1].lstrip('*') if type(r[1]) is str else '') for i, r in df.iterrows()]
 	except Exception as e:
 		print(e)
-		print(df)
+		if 'df' in locals():
+			print(df)
+		else:
+			print('Encountered errors when processing: %s' % text)
 		res = []
 	return res
 
@@ -58,13 +61,21 @@ def annotexts(texts, ontos=[], cache_path='.cache', encoding='ascii'):
 
 
 def batch_annotexts(texts, ontos=[], cache_path='.cache', encoding='ascii'):
-	timestamp = int(datetime.timestamp(datetime.now()))
+	timestamp = str(os.getpid()) + str(datetime.timestamp(datetime.now())).replace('.', '')
 	inpath, outpath = os.path.join(cache_path, 'mtiin%i' % timestamp), os.path.join(cache_path, 'mtiout%i' % timestamp)
 	_ = [fs.mkdir(x) for x in [inpath, outpath]]
 	_ = [fs.write_file(texts[i], os.path.join(inpath, '%i' % i), encoding) for i in range(len(texts))]
 	GATEWAY.entry_point.batch(os.path.abspath(inpath), os.path.abspath(outpath), 10)
-	dfs = [pd.read_csv(os.path.join(outpath, '%i' % i), sep='|', header=None, error_bad_lines=False) for i in range(len(texts))]
-	return [[dict(id=r[2], loc=tuple(np.cumsum(list(map(int, r[8].split('^')[:2])))), name=r[5].lstrip('RtM via: ').split(';')[0] if type(r[5]) is str else '', text=r[1].lstrip('*') if type(r[1]) is str else '') for i, r in df.iterrows()] for df in dfs]
+	res_strs = [_fix_restext(fs.read_file(os.path.join(outpath, '%i' % i))) for i in range(len(texts))]
+	dfs = [pd.read_csv(res, sep='|', header=None) if res else None for res in res_strs]
+	return [[dict(id=r[2], loc=tuple(np.cumsum(list(map(int, r[8].split('^')[:2])))) if type(r[8]) is str and not r[8].isspace else None, name=r[5].lstrip('RtM via: ').split(';')[0] if type(r[5]) is str else '', text=r[1].lstrip('*') if type(r[1]) is str else '') for i, r in df.iterrows()] if df else [] for df in dfs]
+
+
+def _fix_restext(text):
+	if 'ERROR' in text: return None
+	records = text.split('\n')[:-1]
+	rows = ['|'.join(row) if len(row)==9 else '|'.join(row+[' ']*(9-len(row)) if row[0].startswith('0') else [' ']*(9-len(row))+row) for row in [r.split('|') for r in records]]
+	return '\n'.join(rows)
 
 
 if __name__ == '__main__':
