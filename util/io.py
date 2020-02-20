@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, re, sys, yaml, json, time, errno, pickle
+import os, re, sys, yaml, json, codecs, time, errno, pickle
 
 import numpy as np
 import pandas as pd
@@ -80,6 +80,59 @@ def load_json(json_str, max_trail=20):
 # 			trials += 1
 # 			if trials % interval == 0: gc.collect()
 # 	return result
+
+
+class JsonIterable(object):
+	def __init__(self, fpath, encoding='utf-8', errors='ignore', offset=0, retgen=False, maxnum=None, interval=20):
+		self.fpath = fpath
+		self.encoding = encoding
+		self.errors=errors
+		self.offset = offset
+		self.retgen = retgen
+		self.maxnum = maxnum
+		self.interval = interval
+	def __iter__(self):
+		def _obj():
+			import ijson
+			parser = ijson.parse(codecs.open(self.fpath, mode='r', encoding=self.encoding, errors=self.errors))
+			enter_obj, enter_attr, attr_list, obj, attr, array_prefix = False, False, False, {}, '', ''
+			next(parser)
+			prefix, event, value = next(parser)
+			assert((prefix, event) == ('', 'map_key'))
+			array_prefix = value
+			prefix, event, value = next(parser)
+			assert((prefix, event, value) == (array_prefix, 'start_array', None))
+			for prefix, event, value in parser:
+				if (prefix, event, value) == ('%s.item' % array_prefix, 'start_map', None):
+					enter_obj, obj = True, {}
+				elif enter_obj and (prefix, event) == ('%s.item' % array_prefix, 'map_key'):
+					enter_attr, attr = True, value
+				elif enter_obj and enter_attr and (prefix, event, value) == ('%s.item.%s' % (array_prefix, attr), 'start_array', None):
+					attr_list, obj[attr] = True, []
+				elif enter_obj and enter_attr and attr_list and prefix == '%s.item.%s.item' % (array_prefix, attr):
+					obj[attr].append(value)
+				elif enter_obj and enter_attr and attr_list and (prefix, event, value) == ('%s.item.%s' % (array_prefix, attr), 'end_array', None):
+					attr_list, enter_attr = False, False
+				elif enter_obj and enter_attr and not attr_list and prefix == '%s.item.%s' % (array_prefix, attr):
+					obj[attr], enter_attr = value, False
+				elif (prefix, event, value) == ('%s.item' % array_prefix, 'end_map', None):
+					enter_obj = False
+					yield obj
+		objs = _obj()
+		if self.offset > 0:
+			for i in range(self.offset): next(objs)
+		if self.retgen:
+			for obj in objs: yield obj
+		count, result = 0, []
+		try:
+			while True:
+				for i in range(self.interval): result.append(next(objs))
+				yield result
+				count += len(result)
+				if type(self.maxnum) is int and self.maxnum > 0 and count > self.maxnum: break
+				result = []
+		except StopIteration as e:
+			if len(result) > 0: yield result
 
 
 def write_obj(obj, fpath='obj'):
