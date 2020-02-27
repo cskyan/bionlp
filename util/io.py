@@ -9,13 +9,13 @@
 ###########################################################################
 #
 
-import os, re, sys, yaml, json, codecs, time, errno, pickle
+import os, io, re, sys, yaml, json, codecs, time, errno, pickle
 
 import numpy as np
 import pandas as pd
 from scipy import sparse
 
-from . import fs, io
+from . import fs
 
 
 def inst_print(text):
