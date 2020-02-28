@@ -13,11 +13,9 @@ import os, re, sys, copy, time, json, string
 from contextlib import ExitStack
 
 from nltk.tokenize import sent_tokenize, TreebankWordTokenizer
-
 from apiclient import APIClient
-
+import pysolr
 import spacy
-import ftfy, spacy
 try:
     nlp = spacy.load('en_core_sci_md')
 except Exception as e:
@@ -54,10 +52,11 @@ def preprocess(text, tokenize=False):
         return None
 
 
-def fetch_artcls(all_pmids, out_fpaths=None, pid=0, cache=False, abs_only=False, retdoc=False):
+def fetch_artcls(all_pmids, out_fpaths=None, solr_url=None, pid=0, cache=False, abs_only=False, retdoc=False):
 	client = BioCAPI(function='pubmed') if abs_only else BioCAPI(function='pmc')
 	# res = [client.call(id=pmid, encoding='ascii') for pmid in all_pmids]
 	# res = [dict(id=doc['documents'][0]['id'], text=' \n '.join([span['text'] for span in doc['documents'][0]['passages']])) for doc in res]
+	solr = pysolr.Solr(solr_url, always_commit=True, results_cls=dict) if solr_url else None
 	res = []
 	with ExitStack() as stack:
 		if out_fpaths is not None:
@@ -67,17 +66,28 @@ def fetch_artcls(all_pmids, out_fpaths=None, pid=0, cache=False, abs_only=False,
 				# fout_list = [stack.enter_context(open(f, 'a', encoding='utf-8')) if f else None for f in [outfile0, outfile1, outfile2, outfile3]]
 				fout_list = [stack.enter_context(open(f, 'a', encoding='utf-8')) if f else None for f in [None, None, outfile2, outfile3]]
 				pmids = set([int(pmid.rstrip('\n')) for pmid in fout.readlines()]) if cache else set([])
+				if solr:
+					pmid_counts = solr.search('', **{'facet':'on', 'facet.field':'id', 'facet.limit':-1})['facet_counts']['facet_fields']['id']
+					pmids.update([pmid_counts[i] for i in range(0, len(pmid_counts), 2)])
 			except Exception as e:
 				print(e)
 				out_fpaths = None
 		for i, pmid in enumerate(all_pmids):
-			if out_fpaths and pmid in pmids: continue
+			if not retdoc and (pmid in pmids or (out_fpaths is None and solr is None)): continue
 			doc = client.call(id=pmid, encoding='ascii')
 			if len(doc) == 0: continue
 			id, text = doc['documents'][0]['id'], preprocess(' '.join([span['text'] if span['text'] and span['text'][-1] in string.punctuation else '%s.' % span['text'] for span in doc['documents'][0]['passages']]))
 			if not text or text.isspace(): continue
-			fout_list[:2] = [stack.enter_context(open((lambda x: '%s_%s%s'%(x[0], pmid, x[1]))(os.path.splitext(f)), 'a', encoding='utf-8')) if f else None for f in [outfile0, outfile1]]
-			if out_fpaths:
+			saved = False
+			if solr:
+				try:
+					print('Uploading PMID:%s to Solr...' % pmid)
+					solr.add([{'id':pmid, 'fulltext':text}])
+					saved = True
+				except Exception as e:
+					print(e)
+			if not saved and out_fpaths:
+				fout_list[:2] = [stack.enter_context(open((lambda x: '%s_%s%s'%(x[0], pmid, x[1]))(os.path.splitext(f)), 'a', encoding='utf-8')) if f else None for f in [outfile0, outfile1]]
 				if outfile0: fout_list[0].write(text + '\n')
 				if outfile1: fout_list[1].write(text.lower() + '\n')
 				if outfile2 or outfile3:
@@ -85,6 +95,8 @@ def fetch_artcls(all_pmids, out_fpaths=None, pid=0, cache=False, abs_only=False,
 						if not sent.text or sent.text.isspace(): continue
 						if outfile2: fout_list[2].write(sent.text + '\n')
 						if outfile3: fout_list[3].write(sent.text.lower() + '\n')
+				saved = True
+			if saved:
 				fout.write(str(pmid) + '\n')
 			if i and i % 10000 == 0:
 			   print('Retrieved %i documents ' % i)
@@ -106,6 +118,7 @@ class BioCAPI(APIClient, object):
 		self.function = function
 		self.func_url = self._function_url[function]
 		self.restype = self._func_restype.setdefault(function, 'json')
+		self.runtime_args = {}
 
 	def _handle_response(self, response):
 		if (self.restype == 'xml'):
@@ -115,14 +128,18 @@ class BioCAPI(APIClient, object):
 			try:
 				res_json = json.loads(res)
 			except Exception as e:
-				print(e)
-				print(res)
+				if type(res) is bytes and 'The PMC article is not available in open access subset' in res.decode('utf-8', errors='replace'):
+					print('The PMC article %s is not available in open access subset!' % self.runtime_args['id'])
+				else:
+					print(e)
+					print(res)
 				res_json = {}
 			return res_json
 
 	def call(self, max_trail=-1, interval=3, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
 		args.update((k, v) for k, v in kwargs.items() if k in args)
+		self.runtime_args = args
 		trail = 0
 		while max_trail <= 0 or trail < max_trail:
 			try:
