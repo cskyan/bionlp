@@ -56,6 +56,15 @@ def phenodzs(pheno_ids, ontos=[]):
 	return pheno_dzs
 
 
+def phenocases(pheno_ids, ontos=[]):
+	client = MonaInitBioLinkAPI(function='phenocase')
+	print('Querying cases for phenotypes: %s' % pheno_ids)
+	res = [client.call(args=[phnid.replace('_', ':')]) for phnid in pheno_ids]
+	pheno_cases = [[(r['subject']['id'].replace(':', '_'), r['object']['id'], len(set([e['sub'] for e in r['evidence_graph']['edges'] if e['sub'].startswith(':MONARCH')])), r['publications']) for r in rs['associations']] for rs in res]
+	pheno_cases = [[pairs for pairs in r if any([pairs[0].startswith(onto.upper()) for onto in ontos])] for r in pheno_cases] if len(ontos) > 0 else pheno_cases
+	return pheno_cases
+
+
 def pubphenos(pmids, ontos=[]):
 	client = MonaInitBioLinkAPI(function='pubpheno')
 	print('Querying phenotypes for PMID: %s' % pmids)
@@ -153,9 +162,9 @@ class MonaInitSciGraphAPI(APIClient, object):
 class MonaInitBioLinkAPI(APIClient, object):
 
 	BASE_URL = 'https://api.monarchinitiative.org/api'
-	_function_url = {'phenodz':'/bioentity/phenotype/{}/diseases', 'phenopub':'/bioentity/phenotype/{}/publications', 'pubpheno':'/bioentity/publication/{}/phenotypes'}
-	_default_param = {'phenodz':(1, dict()), 'phenopub':(1, dict()), 'pubpheno':(1, dict())} # (number of positional parameters to be filled in the url, keyword parameters to be added to the request)
-	_func_restype = {'phenodz':'json', 'phenopub':'json', 'pubpheno':'json'}
+	_function_url = {'phenocase':'/bioentity/phenotype/{}/cases', 'phenodz':'/bioentity/phenotype/{}/diseases', 'phenopub':'/bioentity/phenotype/{}/publications', 'pubpheno':'/bioentity/publication/{}/phenotypes'}
+	_default_param = {'phenocase':(1, dict()), 'phenodz':(1, dict()), 'phenopub':(1, dict()), 'pubpheno':(1, dict())} # (number of positional parameters to be filled in the url, keyword parameters to be added to the request)
+	_func_restype = {'phenocase':'json', 'phenodz':'json', 'phenopub':'json', 'pubpheno':'json'}
 
 	def __init__(self, function='phenopub'):
 		if (function not in self._default_param):
@@ -200,6 +209,7 @@ class MonaInitBioLinkAPI(APIClient, object):
 if __name__ == '__main__':
 	text = 'Melanoma is a malignant tumor of melanocytes which are found predominantly in skin but also in the bowel and the eye.'
 	print([a['id'] for a in annotext(text, ontos=['HP'])])
+	print(phenocases(['HP:0011842'], ontos=['HP']))
 	print(phenodzs(['HP:0011842'], ontos=['HP']))
 	print(phenopubs(['HP:0011842'], ontos=['HP']))
 	print(pubphenos(['11818962'], ontos=['HP']))
