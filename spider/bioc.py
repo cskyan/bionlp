@@ -76,18 +76,23 @@ def fetch_artcls(all_pmids, out_fpaths=None, solr_url=None, pid=0, cache=False, 
 			if not retdoc and (pmid in pmids or (out_fpaths is None and solr is None)): continue
 			doc = client.call(id=pmid, encoding='ascii')
 			if len(doc) == 0: continue
-			id, text = doc['documents'][0]['id'], preprocess(' '.join([span['text'] if span['text'] and span['text'][-1] in string.punctuation else '%s.' % span['text'] for span in doc['documents'][0]['passages']]))
-			if not text or text.isspace(): continue
+			# pmc_id, text = doc['documents'][0]['id'], preprocess(' '.join([span['text'] if span['text'] and span['text'][-1] in string.punctuation else '%s.' % span['text'] for span in doc['documents'][0]['passages']]))
+			pmc_id, text = doc['documents'][0]['id'], [span['text'] for span in doc['documents'][0]['passages']]
+			# if not text or text.isspace(): continue
 			saved = False
 			if solr:
 				try:
-					print('Uploading PMID:%s to Solr...' % pmid)
-					solr.add([{'id':pmid, 'fulltext':text}])
+					if solr.search('id:%s' % pmid)['response']['numFound'] == 0:
+						print('Uploading PMID:%s to Solr...' % pmid)
+						solr.add([{'id':pmid, 'pmcid':pmc_id, 'fulltext':text}])
+					else:
+						print('PMID:%s exists on Solr...' % pmid)
 					saved = True
 				except Exception as e:
 					print(e)
 			if not saved and out_fpaths:
 				fout_list[:2] = [stack.enter_context(open((lambda x: '%s_%s%s'%(x[0], pmid, x[1]))(os.path.splitext(f)), 'a', encoding='utf-8')) if f else None for f in [outfile0, outfile1]]
+				text = '\n'.join(text)
 				if outfile0: fout_list[0].write(text + '\n')
 				if outfile1: fout_list[1].write(text.lower() + '\n')
 				if outfile2 or outfile3:
@@ -101,7 +106,7 @@ def fetch_artcls(all_pmids, out_fpaths=None, solr_url=None, pid=0, cache=False, 
 			if i and i % 10000 == 0:
 			   print('Retrieved %i documents ' % i)
 			   sys.stdout.flush()
-			if retdoc: res.append(dict(id=id, text=text))
+			if retdoc: res.append(dict(id=pmid, pmcid=pmc_id, text=text))
 	return res if retdoc else None
 
 
