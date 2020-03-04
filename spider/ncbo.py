@@ -84,6 +84,7 @@ class NCBOAPI(APIClient, object):
 				break
 			except Exception as e:
 				print(e)
+				import time
 				time.sleep(interval)
 				trail += 1
 		return res

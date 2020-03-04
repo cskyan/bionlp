@@ -32,7 +32,11 @@ FUNC_URL = {'strbase':'acdat', 'mmlite':'metamaplite', 'ncbo':'ncbo'}
 def annotext(text, ontos=[], tool='strbase', negex=True, **kwargs):
     url = '%s/%s' % (BASE_URL, FUNC_URL[tool])
     params = dict(note=text, negex=negex, **kwargs)
-    res = requests.post(url, json=params).json()['hmName2Id']
+    try:
+        res = requests.post(url, json=params).json()['hmName2Id']
+    except Exception as e:
+        print(e)
+        res = []
     return [dict(id=r['hpoId'].replace(':', '_'), loc=(r['start'], r['start'] + r['length']), text=r['hpoName'], negated=r['negated']) for r in res]
 
 
