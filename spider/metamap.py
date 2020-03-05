@@ -42,7 +42,8 @@ SC=';;'
 ONTO_MAPS = {'HP':'HPO'}
 
 
-def annotext(text, ontos=[], max_trail=-1):
+def annotext(text, ontos=[], max_trail=-1, reset=False):
+	if not text or text.isspace(): return []
 	trail, res = 0, []
 	while max_trail <= 0 or trail < max_trail:
 		try:
@@ -51,7 +52,7 @@ def annotext(text, ontos=[], max_trail=-1):
 			break
 		except Exception as e:
 			print(e)
-			Wrapper.restart_service()
+			if reset: Wrapper.restart_service()
 			time.sleep(3)
 			client = Wrapper()
 			trail += 1

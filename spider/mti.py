@@ -39,6 +39,7 @@ SC=';;'
 
 
 def annotext(text, ontos=[], cache_path='.cache', encoding='ascii'):
+	if not text or text.isspace(): return []
 	timestamp = str(os.getpid()) + str(datetime.timestamp(datetime.now())).replace('.', '')
 	fs.mkdir(cache_path)
 	inpath = os.path.join(cache_path, '%s.in' % timestamp)
