@@ -265,32 +265,59 @@ def get_prds(g, id_regex=None, lang='', idns=''):
 	return [(lambda x: (x[-1], Namespace(x[0]+'#')))(r.split('#')) if '#' in r else (lambda x: (x[-1], Namespace('/'.join(x[:-1])+'/')))(r.split('/')) for r in res]
 
 
-def get_objs(g, predicates, id_regex=None, lang='', idns='', prdns=[], revrel=False, internal=False):
+def get_objs(g, predicates, id_regex=None, retlb=True, lang='', idns='', prdns=[], limit=None, showpred=False, revrel=False, internal=False):
 	idns_str = str(idns)
 	idns = Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
-	# pred_clause = 'BIND("{0}" AS ?predicate) .'if len(predicates) > 1 else ''
-	pred_clause = 'VALUES ?predicate {{ "{0}" }} .'if len(predicates) > 1 else ''
+	predicates = RDFS_LABEL_MAP if len(predicates) == 0 else predicates
+	# pred_clause = 'BIND("{0}" AS ?predicate) .'
+	pred_clause = 'VALUES ?predicate {{ "{0}" }} .'
 	where_clause = ' UNION '.join(['''{?object %s ?id . %s}''' % (':'.join(p), pred_clause.format(p[1])) if revrel else '''{?id %s ?object . %s}''' % (':'.join(p), pred_clause.format(p[1])) for p in predicates.keys()])
 	lang_clause = 'FILTER langMatches(lang(?label), "%s") .' % lang if lang and not lang.isspace() else ''
 	id_clause = 'FILTER regex(str(?id), "%s") .' % id_regex if id_regex and not id_regex.isspace() else ''
 	obj_clause = '?object rdfs:label ?object_label .' if internal else ''
+	limit_clause = ('LIMIT %i' % limit) if limit and type(limit) is int and limit > 0 else ''
 	q_str = '''
-		SELECT DISTINCT ?id ?label ?predicate ?object ?object_label WHERE {
+		SELECT DISTINCT ?id %s %s ?object %s WHERE {
 			%s
 			%s .
-			?id rdfs:label ?label .
+			%s
 			%s
 			%s
 		}
 		ORDER BY ?id
-		''' % (id_clause, where_clause, lang_clause, obj_clause)
+		%s
+		''' % ('?label' if retlb else '', '?predicate' if showpred else '', '?object_label' if internal else '', id_clause, where_clause, '?id rdfs:label ?label .' if retlb else '', lang_clause, obj_clause, limit_clause)
 	q = prepareQuery(q_str, initNs=dict([('obo', OBO), ('rdfs', RDFS)]+prdns+([] if idns_str.isspace() else [('idns', idns)])))
 	result = g.query(q)
 	# res = [[col.toPython().replace(idns_str, '') for col in row] for row in result]
 	res = [[re.sub(r'|'.join(map(re.escape, [idns]+list(map(operator.itemgetter(1), prdns)))), '', col.toPython()) for col in row] for row in result]
-	return pd.DataFrame(res, columns=['id', 'label'] + (['predicate'] if len(predicates) > 1 else []) + ['object'] + (['object_label'] if internal else []))
+	return pd.DataFrame(res, columns=['id'] + (['label'] if retlb else []) + (['predicate'] if showpred else []) + ['object'] + (['object_label'] if internal else []))
 
+
+def get_annots(g, annotpred, id_prefix=None, lang='', idns='', limit=None):
+	idns_str = str(idns)
+	idns = Namespace(idns_str)
+	prepareQuery = get_prepareq(g)
+	lang_clause = 'FILTER langMatches(lang(?label), "%s") .' % lang if lang and not lang.isspace() else ''
+	limit_clause = ('LIMIT %i' % limit) if limit and type(limit) is int and limit > 0 else ''
+	q_str = '''
+		SELECT DISTINCT ?id ?label ?annots WHERE {
+			?id rdfs:label ?label .
+			?annotp rdfs:label "%s" .
+			?annotid owl:annotatedProperty ?annotp .
+			?annotid owl:annotatedSource ?id .
+			?annotid owl:annotatedTarget ?annots .
+			%s
+		}
+		ORDER BY ?id
+		%s
+		''' % (annotpred, lang_clause, limit_clause)
+	q = prepareQuery(q_str, initNs=dict([('obo', OBO), ('rdfs', RDFS), ('owl', OWL)]+([] if idns_str.isspace() else [('idns', idns)])))
+	result = g.query(q)
+	res = [[re.sub(re.escape(idns), '', col.toPython()) for col in row] for row in result]
+	res = [row for row in res if id_prefix is None or id_prefix.isspace() or row[0].startswith(id_prefix)]
+	return pd.DataFrame(res, columns=['id', 'label', annotpred])
 
 
 def get_id_tree(g, id_regex=None, idns='', prdns=[], revrel=False, retree=False, retsubtree=False):
