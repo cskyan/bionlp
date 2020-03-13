@@ -33,6 +33,7 @@ GLB_MDL = None
 
 
 def annotext(text, ontos=[], param_dir='model_params', word_model_file='model_params/pmc_model_new.bin'):
+	if not text or text.isspace(): return []
 	global GLB_MDL
 	model = GLB_MDL = ncrmodel.NCR.loadfromfile(param_dir, word_model_file) if GLB_MDL is None else GLB_MDL
 	res = model.annotate_text(ftfy.fix_text(text), 0.8)

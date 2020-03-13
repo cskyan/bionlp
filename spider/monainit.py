@@ -30,11 +30,12 @@ ANT_PATH = os.path.join(DATA_PATH, 'monainit')
 SC=';;'
 
 
-def annotext(text, ontos=[]):
+def annotext(text, ontos=[], interval=10):
 	client = MonaInitSciGraphAPI(function='annotate')
 	res = client.call(content=text)
 	res = [r for r in res if any([r['id'].startswith(onto.upper()) for onto in ontos])] if len(ontos) > 0 else res
 	for r in res: r['id'] = r['id'].replace(':', '_')
+	if interval>0: time.sleep(interval)
 	return res
 
 
