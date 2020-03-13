@@ -11,8 +11,61 @@
 
 import re, copy, json, difflib, operator, itertools, functools
 from collections import OrderedDict
+from abc import ABC, abstractmethod
 
 from sklearn.multiclass import OneVsRestClassifier
+
+
+class DFSVertex(object):
+    def __init__(self):
+        self.is_visited = False
+
+    @classmethod
+    def from_dict(cls, dict_data):
+        obj = cls()
+        for k, v in dict_data.items():
+            setattr(obj, k, v)
+        return obj
+
+    @property
+    @abstractmethod
+    def children(self):
+        pass
+
+
+class BinTreeVertex(DFSVertex):
+    def __init__(self, idx, data):
+        super(BinTreeVertex, self).__init__()
+        self.idx = idx
+        self.data = data
+
+    @property
+    def children(self):
+        children_indices = 2*self.idx+1, 2*self.idx+2
+        return [BinTreeVertex(idx, self.data) for idx in children_indices if idx < len(self.data)]
+
+    def show_node(self, shared_data={}):
+        print(self.data[self.idx])
+
+
+def stack_dfs(root_vertices, proc_func, shared_data={}):
+    stack = list(root_vertices) if hasattr(root_vertices, '__iter__') else [root_vertices]
+    while len(stack) > 0:
+        cur_entry = stack[-1]
+        if not cur_entry.is_visited:
+            if len(cur_entry.children) > 0: stack.extend(list(cur_entry.children)[::-1])
+            cur_entry.is_visited = True
+        else:
+            if type(proc_func) is str:
+                getattr(cur_entry, proc_func)(shared_data)
+            else:
+                proc_func(cur_entry, shared_data)
+            del stack[-1]
+
+
+def test_dfs():
+	root = BinTreeVertex(0, range(7))
+	stack_dfs(root, 'show_node', shared_data={})
 
 
 def build_model(mdl_func, mdl_t, mdl_name, tuned=False, pr=None, mltl=False, mltp=True, **kwargs):
