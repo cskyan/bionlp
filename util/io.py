@@ -123,16 +123,17 @@ class JsonIterable(object):
 			for i in range(self.offset): next(objs)
 		if self.retgen:
 			for obj in objs: yield obj
-		count, result = 0, []
-		try:
-			while True:
-				for i in range(self.interval): result.append(next(objs))
-				yield result
-				count += len(result)
-				if type(self.maxnum) is int and self.maxnum > 0 and count > self.maxnum: break
-				result = []
-		except StopIteration as e:
-			if len(result) > 0: yield result
+		else:
+			count, result = 0, []
+			try:
+				while True:
+					for i in range(self.interval): result.append(next(objs))
+					yield result
+					count += len(result)
+					if type(self.maxnum) is int and self.maxnum > 0 and count > self.maxnum: break
+					result = []
+			except StopIteration as e:
+				if len(result) > 0: yield result
 
 
 def write_obj(obj, fpath='obj'):
@@ -269,6 +270,25 @@ def df2gen(df, batch_size=32, cache_fpath='tmp_data.h5', table_id=None):
 		for sub_df in pd.read_hdf(cache_fpath, key=table_id, iterator=True, chunksize=batch_size):
 			yield sub_df
 			del sub_df
+
+
+class DataFrameIterable(object):
+	def __init__(self, fpath, encoding='utf-8', errors='ignore', offset=0, retgen=False, maxnum=None, interval=20, **kwargs):
+		self.fpath = fpath
+		self.encoding = encoding
+		self.errors=errors
+		self.offset = offset
+		self.retgen = retgen
+		self.maxnum = maxnum
+		self.interval = interval
+		self.kwargs = kwargs
+	def __iter__(self):
+		obj_reader = pd.read_csv(self.fpath, index_col=None, skiprows=self.offset, chunksize=self.interval, encoding=self.encoding, error_bad_lines=self.errors!='ignore', **self.kwargs)
+		if self.retgen:
+			for sub_df in obj_reader:
+				for idx, obj in sub_df.iterrows(): yield obj.to_dict()
+		else:
+			for sub_df in obj_reader: yield sub_df
 
 
 def write_yaml(data, fpath, append=False, dfs=False):
