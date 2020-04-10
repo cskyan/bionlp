@@ -33,7 +33,7 @@ def annotext(text, ontos=[]):
 	ret_data = client.call(text=text, ontologies=','.join(ontos).upper())
 	try:
 		if type(ret_data) is dict and 'status' in ret_data and ret_data['status'] != 200: raise Exception('Server errors!')
-		res = [dict(id=annot['annotatedClass']['@id'].split('/')[-1], url=annot['annotatedClass']['@id'], antxt=[dict(loc=(antxt['from'], antxt['to']), text=antxt['text'], mtype=antxt['matchType']) for antxt in annot['annotations']]) for annot in ret_data]
+		res = [dict(id=annot['annotatedClass']['@id'].split('/')[-1], url=annot['annotatedClass']['@id'], loc=[(antxt['from'], antxt['to']) for antxt in annot['annotations']], antxt=[dict(loc=(antxt['from'], antxt['to']), text=antxt['text'], mtype=antxt['matchType']) for antxt in annot['annotations']]) for annot in ret_data]
 	except Exception as e:
 		print(e)
 		print(ret_data)
