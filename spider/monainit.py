@@ -9,7 +9,7 @@
 ###########################################################################
 #
 
-import os, sys, json, copy, time, urllib3
+import os, sys, json, copy, time, urllib3, requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from html.parser import HTMLParser
@@ -30,10 +30,11 @@ ANT_PATH = os.path.join(DATA_PATH, 'monainit')
 SC=';;'
 
 
-def annotext(text, ontos=[], interval=10):
-	client = MonaInitSciGraphAPI(function='annotate')
-	res = client.call(content=text)
-	res = [r for r in res if any([r['id'].startswith(onto.upper()) for onto in ontos])] if len(ontos) > 0 else res
+def annotext(text, ontos=[], mode='get', interval=10, **kwargs):
+	client = MonaInitSciGraphAPI(function='annotate', mode=mode)
+	res = client.call(content=text, **kwargs)
+	res = [dict(id=r['token']['id'], text=' '.join(r['token']['terms']), loc=(r['start'], r['end'])) for r in res if any([r['token']['id'].startswith(onto.upper()) for onto in ontos])] if len(ontos) > 0 else res
+	# res = [r for r in res if any([r['id'].startswith(onto.upper()) for onto in ontos])] if len(ontos) > 0 else res
 	for r in res: r['id'] = r['id'].replace(':', '_')
 	if interval>0: time.sleep(interval)
 	return res
@@ -120,17 +121,18 @@ class AnnotParser(HTMLParser):
 class MonaInitSciGraphAPI(APIClient, object):
 
 	BASE_URL = 'https://scigraph-ontology.monarchinitiative.org/scigraph'
-	_function_url = {'annotate':'annotations'}
-	_default_param = {'annotate':dict(content='', minLength=4, longestOnly='false', includeAbbrev='false', includeAcronym='false', includeNumbers='false')}
-	_func_restype = {'annotate':'html'}
+	_function_url = {'annotate-raw':'annotations', 'annotate':'annotations/complete'}
+	_default_param = {'annotate-raw':dict(content='', minLength=4, longestOnly='false', includeAbbrev='false', includeAcronym='false', includeNumbers='false'), 'annotate':dict(content='', minLength=4, longestOnly='false', includeAbbrev='false', includeAcronym='false', includeNumbers='false')}
+	_func_restype = {'annotate-raw':'html', 'annotate':'json'}
 
-	def __init__(self, function='annotate'):
+	def __init__(self, function='annotate', mode='get'):
 		if (function not in self._default_param):
 			raise ValueError('The function %s is not supported!' % function)
 		APIClient.__init__(self)
 		self.function = function
 		self.func_url = self._function_url[function]
 		self.restype = self._func_restype.setdefault(function, 'json')
+		self.mode = mode
 
 	def _handle_response(self, response):
 		if (self.restype == 'html'):
@@ -143,16 +145,35 @@ class MonaInitSciGraphAPI(APIClient, object):
 			parser.close()
 			return parser.build()
 		elif (self.restype == 'json'):
-			return json.loads(ftfy.fix_text(response.data.decode('utf-8', errors='replace')).replace('\\', ''))
+			try:
+				res_str = ftfy.fix_text(response.data.decode('utf-8', errors='replace')).replace('\\', '')
+				res = json.loads(res_str)
+			except Exception as err:
+				print(res_str)
+				print(err)
+				raise err
+			return res
 
 	def call(self, max_trail=-1, interval=3, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
 		args.update((k, v) for k, v in kwargs.items() if k in args)
+		for k in args.keys():
+			if type(args[k]) is str and len(args[k]) > 20: args[k] = args[k].encode('utf-8', errors='replace').decode('utf-8', errors='replace')
 		trail = 0
 		while max_trail <= 0 or trail < max_trail:
 			try:
-				res = APIClient.call(self, '/%s' % self.func_url, **args)
+				if self.mode == 'post':
+					headers={'content-type':'application/x-www-form-urlencoded', 'accept':'application/json'}
+					res = requests.post('%s/%s' % (MonaInitSciGraphAPI.BASE_URL, self.func_url), data=args, headers=headers).json()
+				else:
+					res = APIClient.call(self, '/%s' % self.func_url, **args)
 				break
+			except json.JSONDecodeError as err:
+				print(u'Encountered json decoding error when calling %s with parameters %s' % (u'%s/%s' % (MonaInitSciGraphAPI.BASE_URL, self.func_url), args))
+				res = {}
+				if trail > 2: break
+				time.sleep(interval)
+				trail += 1
 			except Exception as e:
 				print(e)
 				time.sleep(interval)
@@ -209,7 +230,7 @@ class MonaInitBioLinkAPI(APIClient, object):
 
 if __name__ == '__main__':
 	text = 'Melanoma is a malignant tumor of melanocytes which are found predominantly in skin but also in the bowel and the eye.'
-	print([a['id'] for a in annotext(text, ontos=['HP'])])
+	print([a['id'] for a in annotext(text, ontos=['HP'], includeAcronym='true', includeCat='phenotype')])
 	print(phenocases(['HP:0011842'], ontos=['HP']))
 	print(phenodzs(['HP:0011842'], ontos=['HP']))
 	print(phenopubs(['HP:0011842'], ontos=['HP']))
