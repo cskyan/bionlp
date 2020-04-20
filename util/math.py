@@ -20,6 +20,29 @@ from . import io, func
 
 ordinal = lambda n: "%d%s" % (n,"tsnrhtdd"[(int(n/10)%10!=1)*(n%10<4)*n%10::4])
 
+
+def exmp_accuracy(y_true, y_pred):
+	y_true, y_pred = y_true.astype('bool').astype('int8'), y_pred.astype('bool').astype('int8')
+    # return (((~np.bitwise_xor(y_true, y_pred).astype('bool')).astype('int8') * y_pred).sum(axis=1) / (sys.float_info.epsilon + np.bitwise_or(y_true, y_pred).astype('bool').astype('int8').sum(axis=1))).mean()
+	return ((y_true * y_pred).sum(axis=1) / (np.finfo(float).eps + (y_true + y_pred).astype('bool').astype('int8').sum(axis=1))).mean()
+
+def exmp_precision(y_true, y_pred):
+	y_true, y_pred = y_true.astype('bool').astype('int8'), y_pred.astype('bool').astype('int8')
+    # return (((~np.bitwise_xor(y_true, y_pred).astype('bool')).astype('int8') * y_pred).sum(axis=1) / (sys.float_info.epsilon + y_pred.sum(axis=1))).mean()
+	return ((y_true * y_pred).sum(axis=1) / (np.finfo(float).eps + y_pred.sum(axis=1))).mean()
+
+def exmp_recall(y_true, y_pred):
+	y_true, y_pred = y_true.astype('bool').astype('int8'), y_pred.astype('bool').astype('int8')
+    # return (((~np.bitwise_xor(y_true, y_pred).astype('bool')).astype('int8') * y_true).sum(axis=1) / (sys.float_info.epsilon + y_true.sum(axis=1))).mean()
+	return ((y_true * y_pred).sum(axis=1) / (np.finfo(float).eps + y_true.sum(axis=1))).mean()
+
+def exmp_fscore(y_true, y_pred, beta=1):
+	precision = exmp_precision(y_true, y_pred)
+	recall = exmp_recall(y_true, y_pred)
+	beta_pw2 = beta^2
+	return (1 + beta_pw2)*(precision * recall)/(beta_pw2 * precision + recall)
+
+
 def subset(iterable, min_crdnl=0):
 	s = list(iterable) if type(iterable) != list else iterable
 	return chain.from_iterable(combinations(s, x) for x in range(min_crdnl, len(s)+1))
@@ -61,14 +84,14 @@ def slide_window(X, half_window_size=1, padding_val=0):
 
 def softmax(w, t=1.0):
     e = np.exp(np.array(w) / t)
-	dist = e / np.sum(e)
+    dist = e / np.sum(e)
     return dist
 
 
 def mlb_clsw(Y, norm=False):
-	Y = np.array(Y).reshape((len(Y),-1))
-	clsw = (1 - Y).mean(axis=0) if norm else 1.0 / (Y.mean(axis=0) * Y.shape[1])
-	return clsw
+    Y = np.array(Y).reshape((len(Y),-1))
+    clsw = (1 - Y).mean(axis=0) if norm else 1.0 / (Y.mean(axis=0) * Y.shape[1])
+    return clsw
 
 
 def mlb_class_weight(class_weight, Y):
