@@ -43,6 +43,20 @@ def exmp_fscore(y_true, y_pred, beta=1):
 	return (1 + beta_pw2)*(precision * recall)/(beta_pw2 * precision + recall)
 
 
+def sort_coo_row(coo_row):
+	tuples = zip(coo_row.col, coo_row.data)
+	return sorted(tuples, key=lambda x: (x[1], x[0]), reverse=True)
+
+
+def sort_csr_row(csr_row):
+	tuples = zip(csr_row.indices, csr_row.data)
+	return sorted(tuples, key=lambda x: (x[1], x[0]), reverse=True)
+
+
+def sort_coo_rows(coo_mt):
+	return [sort_csr_row(coo_mt.getrow(i)) for i in range(coo_mt.shape[0])]
+
+
 def subset(iterable, min_crdnl=0):
 	s = list(iterable) if type(iterable) != list else iterable
 	return chain.from_iterable(combinations(s, x) for x in range(min_crdnl, len(s)+1))
