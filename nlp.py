@@ -16,7 +16,77 @@ import scipy as sp
 import pandas as pd
 import nltk
 
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+
 from .util import fs, io, func
+
+
+class AdvancedVectorizer(object):
+    def __init__(self, vctrzr_cls, lemma=False, stem=False, synonym=False, phraser_fpath=None, keep_orig=False):
+        self.vctrzr_cls = vctrzr_cls
+        self.lemmatizer = nltk.stem.WordNetLemmatizer() if lemma else None
+        self.stemmer = nltk.stem.SnowballStemmer('english') if stem else None
+        self.synonym = synonym
+        if phraser_fpath and os.path.exists(phraser_fpath):
+            from gensim.models.phrases import Phraser
+            self.phraser = Phraser.load(phraser_fpath)
+        else:
+            self.phraser = None
+        self.keep_orig = keep_orig
+    def build_analyzer(self):
+        analyzer = self.vctrzr_cls.build_analyzer(self)
+        def func(doc):
+            res = (w for w in analyzer(doc))
+            orig_words, res = itertools.tee(res)
+            orig_words = set(orig_words)
+            if self.lemmatizer:
+                if self.keep_orig:
+                    orig_res, res, cur_res = itertools.tee(res, 3)
+                    orig_words |= set(cur_res)
+                    res = itertools.chain(orig_res, (self.lemmatizer.lemmatize(w) for w in res if self.lemmatizer.lemmatize(w) not in orig_words))
+                else:
+                    res = (self.lemmatizer.lemmatize(w) for w in res)
+            if self.stemmer:
+                if self.keep_orig:
+                    orig_res, res, cur_res = itertools.tee(res, 3)
+                    orig_words |= set(cur_res)
+                    res = itertools.chain(orig_res, (self.stemmer.stem(w) for w in res if self.stemmer.stem(w) not in orig_words))
+                else:
+                    res = (self.stemmer.stem(w) for w in res)
+            if self.synonym:
+                if self.keep_orig:
+                    orig_res, res, cur_res = itertools.tee(res, 3)
+                    orig_words |= set(cur_res)
+                    res = itertools.chain(orig_res, (l.name() for w in res for s in nltk.corpus.wordnet.synsets(w) for l in s.lemmas() if l.name() not in orig_words))
+                else:
+                    res = (l.name() for w in res for s in nltk.corpus.wordnet.synsets(w) for l in s.lemmas())
+            if self.phraser:
+                if self.keep_orig:
+                    orig_res, res, cur_res = itertools.tee(res, 3)
+                    orig_words |= set(cur_res)
+                    res = itertools.chain(orig_res, (phrz for phrz in self.phraser[(w for w in res)] if phrz not in orig_words))
+                else:
+                    res = (phrz for phrz in self.phraser[(w for w in res)])
+            return res
+        return func
+
+
+class AdvancedCountVectorizer(AdvancedVectorizer, CountVectorizer):
+    def __init__(self, input='content', encoding='utf-8', decode_error='strict', strip_accents=None, lowercase=True, preprocessor=None, tokenizer=None, stop_words=None, token_pattern=r"(?u)\b\w\w+\b", ngram_range=(1, 1), analyzer='word', max_df=1.0, min_df=1, max_features=None, vocabulary=None, binary=False, dtype=np.int64, lemma=False, stem=False, synonym=False, phraser_fpath=None, keep_orig=False):
+        CountVectorizer.__init__(self, input=input, encoding=encoding, decode_error=decode_error, strip_accents=strip_accents, lowercase=lowercase, preprocessor=preprocessor, tokenizer=tokenizer, stop_words=stop_words, token_pattern=token_pattern, ngram_range=ngram_range, analyzer=analyzer, max_df=max_df, min_df=min_df, max_features=max_features, vocabulary=vocabulary, binary=binary, dtype=dtype)
+        AdvancedVectorizer.__init__(self, CountVectorizer, lemma=lemma, stem=stem, synonym=synonym, phraser_fpath=phraser_fpath, keep_orig=keep_orig)
+
+    def build_analyzer(self):
+        return AdvancedVectorizer.build_analyzer(self)
+
+
+class AdvancedTfidfVectorizer(AdvancedVectorizer, TfidfVectorizer):
+    def __init__(self, input='content', encoding='utf-8', decode_error='strict', strip_accents=None, lowercase=True, preprocessor=None, tokenizer=None, analyzer='word', stop_words=None, token_pattern=r"(?u)\b\w\w+\b", ngram_range=(1, 1), max_df=1.0, min_df=1, max_features=None, vocabulary=None, binary=False, dtype=np.float64, norm='l2', use_idf=True, smooth_idf=True, sublinear_tf=False, lemma=False, stem=False, synonym=False, phraser_fpath=None, keep_orig=False):
+        TfidfVectorizer.__init__(self, input=input, encoding=encoding, decode_error=decode_error, strip_accents=strip_accents, lowercase=lowercase, preprocessor=preprocessor, tokenizer=tokenizer, analyzer=analyzer, stop_words=stop_words, token_pattern=token_pattern, ngram_range=ngram_range, max_df=max_df, min_df=min_df, max_features=max_features, vocabulary=vocabulary, binary=binary, dtype=dtype, norm=norm, use_idf=use_idf, smooth_idf=smooth_idf, sublinear_tf=sublinear_tf)
+        AdvancedVectorizer.__init__(self, CountVectorizer, lemma=lemma, stem=stem, synonym=synonym, phraser_fpath=phraser_fpath, keep_orig=keep_orig)
+
+    def build_analyzer(self):
+        return AdvancedVectorizer.build_analyzer(self)
 
 
 def get_nltk_words():
@@ -96,16 +166,13 @@ def tokenize(text, model='word', ret_loc=False, **kwargs):
 	if (model == 'casual'):
 		tokens = nltk.tokenize.casual.casual_tokenize(text, **kwargs)
 	elif (model == 'mwe'):
-		from nltk.tokenize import MWETokenizer
-		tknzr = MWETokenizer(mwes, separator='_')	# mwes should look like "[('a', 'little'), ('a', 'little', 'bit')]"
+		tknzr = nltk.tokenize.MWETokenizer(mwes, separator='_')	# mwes should look like "[('a', 'little'), ('a', 'little', 'bit')]"
 		tokens = tknzr.tokenize(text.split())
 	elif (model == 'stanford'):
-		from nltk.tokenize import StanfordTokenizer
-		tknzr = StanfordTokenizer(**kwargs)
+		tknzr = nltk.tokenize.StanfordTokenizer(**kwargs)
 		tokens = tknzr.tokenize(text)
 	elif (model == 'treebank'):
-		from nltk.tokenize import TreebankWordTokenizer
-		tknzr = TreebankWordTokenizer()
+		tknzr = nltk.tokenize.TreebankWordTokenizer()
 		tokens = tknzr.tokenize(text)
 	elif (model == 'sent'):
 		tokens = nltk.tokenize.sent_tokenize(text, **kwargs)
@@ -117,8 +184,7 @@ def tokenize(text, model='word', ret_loc=False, **kwargs):
 
 
 def span_tokenize(text):
-	from nltk.tokenize import WhitespaceTokenizer
-	return list(WhitespaceTokenizer().span_tokenize(text))
+	return list(nltk.tokenize.WhitespaceTokenizer().span_tokenize(text))
 
 
 # def del_punct(tokens, location=None):
@@ -135,31 +201,24 @@ def del_punct(tokens, ret_idx=False):
 
 def lemmatize(tokens, model='wordnet', **kwargs):
 	if (model == 'wordnet'):
-		from nltk.stem import WordNetLemmatizer
-		wnl = WordNetLemmatizer()
+		wnl = nltk.stem.WordNetLemmatizer()
 		lemmatized_tokens = [wnl.lemmatize(t, **kwargs) for t in tokens]
 		return lemmatized_tokens
 
 
 def stem(tokens, model='porter', **kwargs):
 	if (model == 'porter'):
-		from nltk.stem.porter import PorterStemmer
-		stemmer = PorterStemmer()
+		stemmer = nltk.stem.PorterStemmer()
 	elif (model == 'isri'):
-		from nltk.stem.isri import ISRIStemmer
-		stemmer = ISRIStemmer()
+		stemmer = nltk.stem.ISRIStemmer()
 	elif (model == 'lancaster'):
-		from nltk.stem.lancaster import LancasterStemmer
-		stemmer = LancasterStemmer()
+		stemmer = nltk.stem.LancasterStemmer()
 	elif (model == 'regexp'):
-		from nltk.stem.regexp import RegexpStemmer
-		stemmer = RegexpStemmer(**kwargs)
+		stemmer = nltk.stem.RegexpStemmer(**kwargs)
 	elif (model == 'rslp'):
-		from nltk.stem import RSLPStemmer
-		stemmer = RSLPStemmer()
+		stemmer = nltk.stem.RSLPStemmer()
 	elif (model == 'snowball'):
-		from nltk.stem.snowball import SnowballStemmer
-		stemmer = SnowballStemmer(**kwargs)
+		stemmer = nltk.stem.SnowballStemmer(**kwargs)
 	stemmed_tokens = [stemmer.stem(t) for t in tokens]
 	return stemmed_tokens
 
