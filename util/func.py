@@ -164,7 +164,7 @@ def overlap_tuple(tuples, search, ret_idx=False):
     for i, t in enumerate(tuples):
         if(t[1] > search[0] and t[0] < search[1]):
             res.append((i, t) if ret_idx else t)
-    return tuple(zip(*res)) if ret_idx else res
+    return (tuple(zip(*res)) if len(res)>0 else ([],[])) if ret_idx else res
 
 
 def remove_duplicate(collection):

@@ -108,7 +108,7 @@ def benchmark(pipeline, X_train, Y_train, X_test, Y_test, mltl=False, signed=Fal
 
 	t0 = time()
 	orig_pred = pred = pipeline.predict(X_test)
-	orig_prob = prob = pipeline.predict_proba(X_test)
+	orig_prob = prob = pipeline.predict_proba(X_test) if hasattr(pipeline, 'predict_proba') else pipeline.decision_function(X_test)
 	test_time = time() - t0
 	print('+' * 80)
 	print('Testing: ')
@@ -373,7 +373,7 @@ def classification(X_train, Y_train, X_test, model_iter, model_param={}, cfg_par
 		X_test = pd.concat(X_test) if (type(X_test) == pd.io.parsers.TextFileReader and not to_hdf) else X_test
 	if (type(Y_train) != pd.io.parsers.TextFileReader and type(Y_train) != pd.DataFrame):
 		Y_train = pd.DataFrame(Y_train)
-	Y_train_mt = Y_train.as_matrix().reshape((Y_train.shape[0],)) if (len(Y_train.shape) == 1 or Y_train.shape[1] == 1) else Y_train.as_matrix()
+	Y_train_mt = Y_train.values.reshape((Y_train.shape[0],)) if (len(Y_train.shape) == 1 or Y_train.shape[1] == 1) else Y_train.values
 	mltl=True if len(Y_train_mt.shape) > 1 and Y_train_mt.shape[1] > 1 or 2 in Y_train_mt else False
 
 	print('Classification is starting...')
@@ -482,13 +482,13 @@ def kf2data(kf, X, Y, to_hdf=False, hdf5_fpath='crsval_dataset.h5'):
 			if (type(X[0]) == pd.io.parsers.TextFileReader):
 				pass
 			assert all([len(x) == len(X[0]) for x in X[1:]])
-			X_train, X_test = [x.iloc[train_idx,:] for x in X] if type(X[0]) != HDF5Matrix else [x[train_idx,:] for x in X], [x.iloc[test_idx,:] for x in X] if type(X[0]) != HDF5Matrix else [x[test_idx,:] for x in X]
+			X_train, X_test = [x[train_idx,:] for x in X] if to_hdf and type(X[0]) == HDF5Matrix or type(X[0]) != pd.DataFrame else [x.iloc[train_idx,:] for x in X], [x[test_idx,:] for x in X] if to_hdf and type(X[0]) == HDF5Matrix or type(X[0]) != pd.DataFrame else [x.iloc[test_idx,:] for x in X]
 			train_idx_df, test_idx_df = pd.DataFrame(np.arange(X_train[0].shape[0]), index=X[0].index[train_idx]), pd.DataFrame(np.arange(X_test[0].shape[0]), index=X[0].index[test_idx])
 		else:
 			if (type(X) == pd.io.parsers.TextFileReader):
 				pass
-			X_train, X_test = X.iloc[train_idx,:] if type(X) != HDF5Matrix else X[train_idx], X.iloc[test_idx,:] if type(X) != HDF5Matrix else X[test_idx]
-			train_idx_df, test_idx_df = pd.DataFrame(np.arange(X_train.shape[0]), index=X.index[train_idx] if type(X) != HDF5Matrix else None), pd.DataFrame(np.arange(X_test.shape[0]), index=X.index[test_idx] if type(X) != HDF5Matrix else None)
+			X_train, X_test = X[train_idx] if to_hdf and type(X) == HDF5Matrix or type(X) != pd.DataFrame else X.iloc[train_idx,:], X[test_idx] if to_hdf and type(X) == HDF5Matrix or type(X) != pd.DataFrame else X.iloc[test_idx,:]
+			train_idx_df, test_idx_df = pd.DataFrame(np.arange(X_train.shape[0]), index=None if to_hdf and type(X) == HDF5Matrix or type(X) != pd.DataFrame else X.index[train_idx]), pd.DataFrame(np.arange(X_test.shape[0]), index=None if to_hdf and type(X) == HDF5Matrix or type(X) != pd.DataFrame else X.index[test_idx])
 		Y_train, Y_test = Y[train_idx], Y[test_idx]
 		# Y_train = Y_train.reshape((Y_train.shape[0],)) if (len(Y_train.shape) > 1 and Y_train.shape[1] == 1) else Y_train
 		# Y_test = Y_test.reshape((Y_test.shape[0],)) if (len(Y_test.shape) > 1 and Y_test.shape[1] == 1) else Y_test
@@ -496,14 +496,14 @@ def kf2data(kf, X, Y, to_hdf=False, hdf5_fpath='crsval_dataset.h5'):
 			with h5py.File(hdf5_fpath, 'w') as hf:
 				if (type(X_train) == list):
 					for idx, x_train in enumerate(X_train):
-						hf.create_dataset('X_train%i' % idx, data=x_train.as_matrix() if type(X) != HDF5Matrix else x_train[:])
+						hf.create_dataset('X_train%i' % idx, data=x_train.values if type(X) != HDF5Matrix else x_train[:])
 				else:
-					hf.create_dataset('X_train', data=X_train.as_matrix() if type(X) != HDF5Matrix else X_train[:])
+					hf.create_dataset('X_train', data=X_train.values if type(X) != HDF5Matrix else X_train[:])
 				if (type(X_test) == list):
 					for idx, x_test in enumerate(X_test):
-						hf.create_dataset('X_test%i' % idx, data=x_test.as_matrix() if type(X) != HDF5Matrix else x_test[:])
+						hf.create_dataset('X_test%i' % idx, data=x_test.values if type(X) != HDF5Matrix else x_test[:])
 				else:
-					hf.create_dataset('X_test', data=X_test.as_matrix() if type(X) != HDF5Matrix else X_test[:])
+					hf.create_dataset('X_test', data=X_test.values if type(X) != HDF5Matrix else X_test[:])
 				hf.create_dataset('Y_train', data=Y_train if type(Y) != HDF5Matrix else Y_train[:])
 				hf.create_dataset('Y_test', data=Y_test if type(Y) != HDF5Matrix else Y_test[:])
 			yield i, [HDF5Matrix(hdf5_fpath, 'X_train%i' % idx) for idx in range(len(X_train))] if (type(X_train) == list) else HDF5Matrix(hdf5_fpath, 'X_train'), [HDF5Matrix(hdf5_fpath, 'X_test%i' % idx) for idx in range(len(X_test))] if (type(X_test) == list) else HDF5Matrix(hdf5_fpath, 'X_test'), HDF5Matrix(hdf5_fpath, 'Y_train'), HDF5Matrix(hdf5_fpath, 'Y_test'), train_idx_df, test_idx_df
@@ -516,7 +516,7 @@ def kf2data(kf, X, Y, to_hdf=False, hdf5_fpath='crsval_dataset.h5'):
 			for hfpath in remove_hfps:
 				HDF5Matrix.refs.pop(hfpath, None)
 		else:
-			yield i, [x.as_matrix() for x in X_train] if (type(X_train) == list) else X_train.as_matrix(), [x.as_matrix() for x in X_test] if (type(X_test) == list) else X_test.as_matrix(), Y_train, Y_test, train_idx_df, test_idx_df
+			yield i, [x.values for x in X_train] if (type(X_train) == list) else X_train.values, [x.values for x in X_test] if (type(X_test) == list) else X_test.values, Y_train, Y_test, train_idx_df, test_idx_df
 
 
 # Evaluation
@@ -539,7 +539,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 	if (type(Y_train) != pd.io.parsers.TextFileReader and type(Y_train) != pd.DataFrame):
 		Y_train = pd.DataFrame(Y_train) if (type(Y_train) == pd.io.parsers.TextFileReader and not to_hdf) else Y_train
 	if (type(Y_train) != HDF5Matrix):
-		Y_train = Y_train.as_matrix().reshape((Y_train.shape[0],)) if (len(Y_train.shape) == 1 or Y_train.shape[1] == 1) else Y_train.as_matrix()
+		Y_train = Y_train.values.reshape((Y_train.shape[0],)) if (len(Y_train.shape) == 1 or Y_train.shape[1] == 1) else Y_train.values
 	else:
 		Y_train = Y_train
 
@@ -554,7 +554,7 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 	if (type(Y_test) != pd.io.parsers.TextFileReader and type(Y_test) != pd.DataFrame):
 		Y_test = pd.DataFrame(Y_test) if (type(Y_test) == pd.io.parsers.TextFileReader and not to_hdf) else Y_test
 	if (type(Y_test) != HDF5Matrix):
-		Y_test = Y_test.as_matrix().reshape((Y_test.shape[0],)) if (len(Y_test.shape) == 1 or Y_test.shape[1] == 1) else Y_test.as_matrix()
+		Y_test = Y_test.values.reshape((Y_test.shape[0],)) if (len(Y_test.shape) == 1 or Y_test.shape[1] == 1) else Y_test.values
 	else:
 		Y_test = Y_test
 
@@ -742,14 +742,14 @@ def evaluate(X_train, Y_train, X_test, Y_test, model_iter, model_param={}, avg='
 		for mtrc in metric_idx:
 			mtrc_avg_list, mtrc_std_list = [[] for i in range(2)]
 			if (global_param['comb']):
-				mtrc_avg = perf_avg_df.ix[mtrc,:].as_matrix().reshape((1,-1))
-				mtrc_std = perf_std_df.ix[mtrc,:].as_matrix().reshape((1,-1))
+				mtrc_avg = perf_avg_df.ix[mtrc,:].values.reshape((1,-1))
+				mtrc_std = perf_std_df.ix[mtrc,:].values.reshape((1,-1))
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=PL_NAMES, labels=None, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clf_ft%s' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)
 			else:
 				for i in range(filt_num):
 					offset = i * clf_num
-					mtrc_avg_list.append(perf_avg_df.ix[mtrc,offset:offset+clf_num].as_matrix().reshape((1,-1)))
-					mtrc_std_list.append(perf_std_df.ix[mtrc,offset:offset+clf_num].as_matrix().reshape((1,-1)))
+					mtrc_avg_list.append(perf_avg_df.ix[mtrc,offset:offset+clf_num].values.reshape((1,-1)))
+					mtrc_std_list.append(perf_std_df.ix[mtrc,offset:offset+clf_num].values.reshape((1,-1)))
 				mtrc_avg = np.concatenate(mtrc_avg_list)
 				mtrc_std = np.concatenate(mtrc_std_list)
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=CLF_NAMES, labels=FILT_NAMES, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clf_ft%s' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)
@@ -776,7 +776,7 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 	if (type(Y) != pd.io.parsers.TextFileReader and type(Y) != pd.DataFrame):
 		Y = pd.DataFrame(Y) if (type(Y) == pd.io.parsers.TextFileReader and not to_hdf) else Y
 	if (type(Y) != HDF5Matrix):
-		Y_mt = Y.as_matrix().reshape((Y.shape[0],)) if (len(Y.shape) == 1 or Y.shape[1] == 1) else Y.as_matrix()
+		Y_mt = Y.values.reshape((Y.shape[0],)) if (len(Y.shape) == 1 or Y.shape[1] == 1) else Y.values
 	else:
 		Y_mt = Y
 	is_mltl = True if len(Y_mt.shape) > 1 and Y_mt.shape[1] > 1 or 2 in Y_mt else False
@@ -1002,14 +1002,14 @@ def cross_validate(X, Y, model_iter, model_param={}, avg='micro', kfold=5, cfg_p
 		for mtrc in metric_idx:
 			mtrc_avg_list, mtrc_std_list = [[] for i in range(2)]
 			if (global_param['comb']):
-				mtrc_avg = perf_avg_df.ix[mtrc,:].as_matrix().reshape((1,-1))
-				mtrc_std = perf_std_df.ix[mtrc,:].as_matrix().reshape((1,-1))
+				mtrc_avg = perf_avg_df.ix[mtrc,:].values.reshape((1,-1))
+				mtrc_std = perf_std_df.ix[mtrc,:].values.reshape((1,-1))
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=PL_NAMES, labels=None, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clf_ft%s' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)
 			else:
 				for i in range(filt_num):
 					offset = i * clf_num
-					mtrc_avg_list.append(perf_avg_df.ix[mtrc,offset:offset+clf_num].as_matrix().reshape((1,-1)))
-					mtrc_std_list.append(perf_std_df.ix[mtrc,offset:offset+clf_num].as_matrix().reshape((1,-1)))
+					mtrc_avg_list.append(perf_avg_df.ix[mtrc,offset:offset+clf_num].values.reshape((1,-1)))
+					mtrc_std_list.append(perf_std_df.ix[mtrc,offset:offset+clf_num].values.reshape((1,-1)))
 				mtrc_avg = np.concatenate(mtrc_avg_list)
 				mtrc_std = np.concatenate(mtrc_std_list)
 				plot.plot_bar(mtrc_avg, mtrc_std, xlabels=CLF_NAMES, labels=FILT_NAMES, title='%s by Classifier and Feature Selection' % mtrc, fname='%s_clf_ft%s' % (mtrc.replace(' ', '_').lower(), lbidstr), plot_cfg=common_cfg)

@@ -198,12 +198,16 @@ def filtref(cur_f, ref_f, ori_f=None):
 
 def gen_fis(X, Y, filtfunc=freqs, scaled=True, **kwargs):
 	fi_list, pval_list = [[] for i in range(2)]
-	if (len(Y.shape) == 1): Y = Y.reshape((-1, 1))
-	for i in range(Y.shape[1]):
-		y = Y[:,i].reshape((-1,1))
-		fi, pval = filtfunc(X, y, scaled=scaled, **kwargs)
+	if (len(Y.shape) == 1):
+		fi, pval = filtfunc(X, Y, scaled=scaled, **kwargs)
 		fi_list.append(fi)
 		pval_list.append(pval)
+	else:
+		for i in range(Y.shape[1]):
+			y = Y[:,i].reshape((-1,1))
+			fi, pval = filtfunc(X, y, scaled=scaled, **kwargs)
+			fi_list.append(fi)
+			pval_list.append(pval)
 	return np.vstack(fi_list), np.vstack(pval_list)
 
 

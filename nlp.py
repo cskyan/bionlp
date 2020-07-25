@@ -20,13 +20,48 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
 from .util import fs, io, func
 
+import ftfy, spacy
+try:
+    nlp = spacy.load('en_core_sci_md')
+except Exception as e:
+    print(e)
+    try:
+        nlp = spacy.load('en_core_sci_sm')
+    except Exception as e:
+        print(e)
+        nlp = spacy.load('en_core_web_sm')
+
+def enrich_txt_by_w2v(texts, w2v_model=None, w2v_cache=None, topk=10):
+    if (w2v_cache is None or type(w2v_cache) is dict and len(w2v_cache) < 4) and w2v_model is None: return texts, w2v_cache
+    if w2v_cache is not None and type(w2v_cache) is dict and len(w2v_cache) >= 4:
+        w2v_weights, word2idx, idx2word, w2v_index = w2v_cache['w2v_weights'], w2v_cache['word2idx'], w2v_cache['idx2word'], w2v_cache['w2v_index']
+    else:
+        import faiss
+        from bionlp.spider import w2v
+        w2v_wrapper = w2v.GensimW2VWrapper(w2v_model)
+        w2v_weights = w2v_wrapper.get_weights()
+        word2idx, idx2word = w2v_wrapper.get_vocab()
+        w2v_index = faiss.IndexFlatL2(w2v_wrapper.get_dim())
+        w2v_index.add(w2v_weights.astype('float32'))
+        # w2v_index = faiss.index_cpu_to_all_gpus(w2v_index)
+        w2v_cache = dict(w2v_weights=w2v_weights, word2idx=word2idx, idx2word=idx2word, w2v_index=w2v_index)
+    texts = list(texts)
+    if len(texts) == 0: return texts, w2v_cache
+    word_indices = [[word2idx.setdefault(w.text.lower(), -1) for w in nlp(text)] for text in texts]
+    for i, word_idxs in enumerate(word_indices):
+        if all([idx==-1 for idx in word_idxs]): continue
+        D, I = w2v_index.search(np.vstack([w2v_weights[idx] for idx in word_idxs if idx != -1]), topk)
+        texts[i] = ' '.join([texts[i]] + [idx2word[idx] for idxs in I for idx in idxs])
+    return texts, w2v_cache
 
 class AdvancedVectorizer(object):
-    def __init__(self, vctrzr_cls, lemma=False, stem=False, synonym=False, phraser_fpath=None, keep_orig=False):
+    def __init__(self, vctrzr_cls, lemma=False, stem=False, synonym=False, w2v_fpath=None, w2v_topk=10, phraser_fpath=None, keep_orig=False):
         self.vctrzr_cls = vctrzr_cls
         self.lemmatizer = nltk.stem.WordNetLemmatizer() if lemma else None
         self.stemmer = nltk.stem.SnowballStemmer('english') if stem else None
         self.synonym = synonym
+        _, self.w2v_cache = enrich_txt_by_w2v([], w2v_model=w2v_fpath)
+        self.w2v_topk = w2v_topk
         if phraser_fpath and os.path.exists(phraser_fpath):
             from gensim.models.phrases import Phraser
             self.phraser = Phraser.load(phraser_fpath)
@@ -60,6 +95,13 @@ class AdvancedVectorizer(object):
                     res = itertools.chain(orig_res, (l.name() for w in res for s in nltk.corpus.wordnet.synsets(w) for l in s.lemmas() if l.name() not in orig_words))
                 else:
                     res = (l.name() for w in res for s in nltk.corpus.wordnet.synsets(w) for l in s.lemmas())
+            if self.w2v_cache:
+                if self.keep_orig:
+                    orig_res, res, cur_res = itertools.tee(res, 3)
+                    orig_words |= set(cur_res)
+                    res = itertools.chain(orig_res, (enr_w for enr_w in enrich_txt_by_w2v((w for w in res), w2v_cache=self.w2v_cache, topk=self.w2v_topk)[0]))
+                else:
+                    res = (enr_w for enr_w in enrich_txt_by_w2v((w for w in res), w2v_cache=self.w2v_cache, topk=self.w2v_topk)[0])
             if self.phraser:
                 if self.keep_orig:
                     orig_res, res, cur_res = itertools.tee(res, 3)
@@ -70,20 +112,29 @@ class AdvancedVectorizer(object):
             return res
         return func
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['w2v_cache'] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.w2v_cache = None
+
 
 class AdvancedCountVectorizer(AdvancedVectorizer, CountVectorizer):
-    def __init__(self, input='content', encoding='utf-8', decode_error='strict', strip_accents=None, lowercase=True, preprocessor=None, tokenizer=None, stop_words=None, token_pattern=r"(?u)\b\w\w+\b", ngram_range=(1, 1), analyzer='word', max_df=1.0, min_df=1, max_features=None, vocabulary=None, binary=False, dtype=np.int64, lemma=False, stem=False, synonym=False, phraser_fpath=None, keep_orig=False):
+    def __init__(self, input='content', encoding='utf-8', decode_error='strict', strip_accents=None, lowercase=True, preprocessor=None, tokenizer=None, stop_words=None, token_pattern=r"(?u)\b\w\w+\b", ngram_range=(1, 1), analyzer='word', max_df=1.0, min_df=1, max_features=None, vocabulary=None, binary=False, dtype=np.int64, lemma=False, stem=False, synonym=False, w2v_fpath=None, w2v_topk=10, phraser_fpath=None, keep_orig=False):
         CountVectorizer.__init__(self, input=input, encoding=encoding, decode_error=decode_error, strip_accents=strip_accents, lowercase=lowercase, preprocessor=preprocessor, tokenizer=tokenizer, stop_words=stop_words, token_pattern=token_pattern, ngram_range=ngram_range, analyzer=analyzer, max_df=max_df, min_df=min_df, max_features=max_features, vocabulary=vocabulary, binary=binary, dtype=dtype)
-        AdvancedVectorizer.__init__(self, CountVectorizer, lemma=lemma, stem=stem, synonym=synonym, phraser_fpath=phraser_fpath, keep_orig=keep_orig)
+        AdvancedVectorizer.__init__(self, CountVectorizer, lemma=lemma, stem=stem, synonym=synonym, w2v_fpath=w2v_fpath, w2v_topk=w2v_topk, phraser_fpath=phraser_fpath, keep_orig=keep_orig)
 
     def build_analyzer(self):
         return AdvancedVectorizer.build_analyzer(self)
 
 
 class AdvancedTfidfVectorizer(AdvancedVectorizer, TfidfVectorizer):
-    def __init__(self, input='content', encoding='utf-8', decode_error='strict', strip_accents=None, lowercase=True, preprocessor=None, tokenizer=None, analyzer='word', stop_words=None, token_pattern=r"(?u)\b\w\w+\b", ngram_range=(1, 1), max_df=1.0, min_df=1, max_features=None, vocabulary=None, binary=False, dtype=np.float64, norm='l2', use_idf=True, smooth_idf=True, sublinear_tf=False, lemma=False, stem=False, synonym=False, phraser_fpath=None, keep_orig=False):
+    def __init__(self, input='content', encoding='utf-8', decode_error='strict', strip_accents=None, lowercase=True, preprocessor=None, tokenizer=None, analyzer='word', stop_words=None, token_pattern=r"(?u)\b\w\w+\b", ngram_range=(1, 1), max_df=1.0, min_df=1, max_features=None, vocabulary=None, binary=False, dtype=np.float64, norm='l2', use_idf=True, smooth_idf=True, sublinear_tf=False, lemma=False, stem=False, synonym=False, w2v_fpath=None, w2v_topk=10, phraser_fpath=None, keep_orig=False):
         TfidfVectorizer.__init__(self, input=input, encoding=encoding, decode_error=decode_error, strip_accents=strip_accents, lowercase=lowercase, preprocessor=preprocessor, tokenizer=tokenizer, analyzer=analyzer, stop_words=stop_words, token_pattern=token_pattern, ngram_range=ngram_range, max_df=max_df, min_df=min_df, max_features=max_features, vocabulary=vocabulary, binary=binary, dtype=dtype, norm=norm, use_idf=use_idf, smooth_idf=smooth_idf, sublinear_tf=sublinear_tf)
-        AdvancedVectorizer.__init__(self, CountVectorizer, lemma=lemma, stem=stem, synonym=synonym, phraser_fpath=phraser_fpath, keep_orig=keep_orig)
+        AdvancedVectorizer.__init__(self, CountVectorizer, lemma=lemma, stem=stem, synonym=synonym, w2v_fpath=w2v_fpath, w2v_topk=w2v_topk, phraser_fpath=phraser_fpath, keep_orig=keep_orig)
 
     def build_analyzer(self):
         return AdvancedVectorizer.build_analyzer(self)

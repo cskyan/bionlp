@@ -15,8 +15,10 @@ from . import math as imath
 
 ## Scikit-Learn Utils ##
 
-def extract_topn_features(vectorizer, inputs, topn=10):
+def extract_topn_features(vectorizer, inputs, topk=10):
 	feature_names = vectorizer.get_feature_names()
-	sorted_items = imath.sort_coo_rows(vectorizer.transform(inputs).tocoo())
-    sorted_items = [x[:topn] for x in sorted_items]
+	coo_mt = vectorizer.transform(inputs).tocoo()
+	sorted_items = imath.sort_coo_rows(coo_mt)
+	if topk < 1: topk = coo_mt.shape[1]
+	sorted_items = [x[:topk if topk <= len(x) else len(x)] for x in sorted_items]
 	return [[(feature_names[idx], round(score, 4)) for idx, score in items] for items in sorted_items]

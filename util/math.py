@@ -39,9 +39,61 @@ def exmp_recall(y_true, y_pred):
 def exmp_fscore(y_true, y_pred, beta=1):
 	precision = exmp_precision(y_true, y_pred)
 	recall = exmp_recall(y_true, y_pred)
-	beta_pw2 = beta^2
+	beta_pw2 = beta**2
 	return (1 + beta_pw2)*(precision * recall)/(beta_pw2 * precision + recall)
 
+def normalize(a, ord=1):
+    norm=np.linalg.norm(a, ord=ord)
+    if norm==0: norm=np.finfo(a.dtype).eps
+    return a/norm
+
+def topk(D, k=10, descend=False):
+    I = np.argsort(D, axis=1)[:,-1:D.shape[1]-k-1:-1] if descend else np.argsort(D, axis=1)[:,:k]
+    return D[np.arange(D.shape[0])[:,None],I], I
+
+class VectorDB():
+	def __init__(self, metric='euclidean', feature_weights=None):
+		self.metric = metric
+		if feature_weights is not None and len(feature_weights) > 0:
+			if type(feature_weights) is list:
+				# self.feature_weights = np.array([])
+				# for ftw in feature_weights:
+				# 	indices, ws = zip(*ftw.values())
+				# 	indices, ws = np.hstack(indices), np.hstack([np.array([w]*len(idx)) for idx, w in zip(indices, ws)])
+				# 	weights = np.zeros(indices.max()+1)
+				# 	weights[indices] = ws
+				# 	self.feature_weights = np.hstack(self.feature_weights, weights)
+				self.feature_weights = {}
+				offset = 0
+				for ftw in feature_weights:
+					partial_max = 0
+					for k, v in ftw.items():
+						self.feature_weights[k] = (np.hstack([self.feature_weights[k], v[0] + offset]) if k in self.feature_weights else v[0] + offset, v[1])
+						partial_max = max(partial_max, v[0].max())
+					offset += partial_max
+			elif type(feature_weights) is dict:
+				# indices, ws = zip(*feature_weights.values())
+				# indices, ws = np.hstack(indices), np.hstack([np.array([w]*len(idx)) for idx, w in zip(indices, ws)])
+				# self.feature_weights = np.zeros(indices.max()+1)
+				# self.feature_weights[indices] = ws
+				self.feature_weights = feature_weights
+			else:
+				self.feature_weights = None
+		else:
+			self.feature_weights = None
+
+	def add(self, Y):
+		self.Y = Y
+
+	def search(self, X, k, n_jobs=None):
+		from sklearn.metrics import pairwise_distances as pdist
+		if self.feature_weights is not None:
+			D = np.zeros((X.shape[0], self.Y.shape[0]))
+			for k, v in self.feature_weights.items():
+				D = np.add(D, v[1] * np.nan_to_num(pdist(X[:,v[0]], self.Y[:,v[0]], metric=self.metric, n_jobs=n_jobs)))
+		else:
+			D = pdist(X, self.Y, metric=self.metric, n_jobs=n_jobs)
+		return topk(D, k)
 
 def sort_coo_row(coo_row):
 	tuples = zip(coo_row.col, coo_row.data)
