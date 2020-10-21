@@ -26,7 +26,7 @@ SC=';;'
 
 
 BASE_URL = 'https://impact2.dbmi.columbia.edu/doc2hpo/parse'
-FUNC_URL = {'strbase':'acdat', 'mmlite':'metamaplite', 'ncbo':'ncbo'}
+FUNC_URL = {'strbase':'acdat', 'mmlite':'metamaplite', 'ncbo':'ncbo', 'ensemble':'ensemble'}
 
 
 def annotext(text, ontos=[], tool='strbase', negex=True, **kwargs):
@@ -37,9 +37,10 @@ def annotext(text, ontos=[], tool='strbase', negex=True, **kwargs):
     except Exception as e:
         print(e)
         res = []
-    return [dict(id=r['hpoId'].replace(':', '_'), loc=(r['start'], r['start'] + r['length']), text=r['hpoName'], negated=r['negated']) for r in res]
+
+    return [dict(id=r['hpoId'].replace(':', '_'), loc=(r['start'], r['start'] + r['length']), text=r['hpoName'], negated=r['negated']) for r in res if type(r) is dict]
 
 
 if __name__ == '__main__':
     text = 'Melanoma is a malignant tumor of melanocytes which are found predominantly in skin but also in the bowel and the eye.'
-    print([a['id'] for a in annotext(text, ontos=['HP'], tool='mmlite')])
+    print([a['id'] for a in annotext(text, ontos=['HP'], tool='ensemble')])
