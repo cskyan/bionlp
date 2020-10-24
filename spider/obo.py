@@ -90,7 +90,7 @@ def output_reader(fpath):
 			    res[record_id] = []
 			else:
 			    record = line.strip('\n').split('\t')
-			    res[record_id].append((onto_prefix+record[0], record[1], (record[2], record[3])))
+			    res[record_id].append((onto_prefix+record[0], record[1], (int(record[2]), int(record[3])))
 	return res
 
 
