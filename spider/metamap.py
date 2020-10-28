@@ -95,6 +95,7 @@ class Wrapper():
 		return tag_srv, wsd_srv
 
 	def __init__(self):
+		self.__enter__()
 		from pymetamap import MetaMap
 		self.mm = MetaMap.get_instance(os.path.join(os.environ['MM_HOME'], 'bin', 'metamap'))
 

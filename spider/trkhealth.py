@@ -21,7 +21,7 @@ if sys.platform.startswith('win32'):
 	DATA_PATH = 'D:\\data\\bionlp'
 elif sys.platform.startswith('linux'):
 	DATA_PATH = os.path.join(os.path.expanduser('~'), 'data', 'bionlp')
-ANT_PATH = os.path.join(DATA_PATH, 'ncbo')
+ANT_PATH = os.path.join(DATA_PATH, 'trkhealth')
 API_KEY = '0bbdd899-319b-4bc7-a93f-83574788ae8f'
 SC=';;'
 

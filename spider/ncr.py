@@ -16,9 +16,6 @@ import pandas as pd
 
 import ftfy
 
-# from ..util import ontology
-# from bionlp.util import ontology
-
 SRC_PATH = os.path.join(os.path.expanduser("~"), 'source', 'py', 'NeuralCR')
 sys.path.append(SRC_PATH)
 import ncrmodel
