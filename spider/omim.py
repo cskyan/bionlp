@@ -33,12 +33,36 @@ API_KEY = 'btpdnKMaTTaq87fvYPgl9A'
 SC=';;'
 
 
-def omim_refs(omim_ids):
+def omim_entry(omim_ids, fields=[], text_fields=[], interval=0):
+	client = OMIMAPI(function='entry')
+	unique_omim_ids = set(omim_ids)
+	print('Querying entries for OMIM ids: %s' % ', '.join(unique_omim_ids))
+	sys.stdout.flush()
+	if len(text_fields) > 0 and 'text' in fields: fileds.remove('text')
+	include_params = ','.join(fields+[','.join([':'.join(['text', x]) for x in text_fields])])
+	if interval == 0:
+		res = [client.call(mimNumber=omimid, include=include_params) for omimid in omim_ids]
+	else:
+		res = []
+		for omimid in omim_ids:
+			res.append(client.call(mimNumber=omimid, include=include_params))
+			time.sleep(interval)
+	res_map = dict(zip(unique_omim_ids, [r['omim']['entryList'][0]['entry'] if 'omim' in r else r for r in res]))
+	return [res_map[omimid] for omimid in omim_ids]
+
+
+def omim_refs(omim_ids, interval=0):
 	client = OMIMAPI(function='entref')
 	unique_omim_ids = set(omim_ids)
 	print('Querying publications for OMIM ids: %s' % ', '.join(unique_omim_ids))
 	sys.stdout.flush()
-	res = [client.call(mimNumber=omimid) for omimid in omim_ids]
+	if interval == 0:
+		res = [client.call(mimNumber=omimid) for omimid in omim_ids]
+	else:
+		res = []
+		for omimid in omim_ids:
+			res.append(client.call(mimNumber=omimid))
+			time.sleep(interval)
 	res_map = dict(zip(unique_omim_ids, [[ref['reference']['pubmedID'] for refs in r['omim']['referenceLists'] for ref in refs['referenceList'] if 'pubmedID' in ref['reference']] if r else [] for r in res]))
 	return [res_map[omimid] for omimid in omim_ids]
 
@@ -84,11 +108,11 @@ BUILDER_MAP = {'entref':RefBuilder}
 class OMIMAPI(APIClient, object):
 
 	BASE_URL = 'https://api.omim.org/api'
-	_function_url = {'entref':'/entry/referenceList'}
-	_default_param = {'entref':dict(apiKey=API_KEY, format='json', mimNumber='')}
-	_func_restype = {'entref':'xml'}
+	_function_url = {'entry':'/entry', 'entref':'/entry/referenceList'}
+	_default_param = {'entry':dict(apiKey=API_KEY, format='json', mimNumber='', include=''), 'entref':dict(apiKey=API_KEY, format='json', mimNumber='')}
+	_func_restype = {'entry':'json', 'entref':'json'}
 
-	def __init__(self, function='entref'):
+	def __init__(self, function='entry'):
 		if (function not in self._default_param):
 			raise ValueError('The function %s is not supported!' % function)
 		APIClient.__init__(self)
@@ -100,7 +124,7 @@ class OMIMAPI(APIClient, object):
 		if (self.restype == 'json'):
 			res = {}
 			if (response.status != 200): raise ConnectionError('Server error! Please wait a second and try again.')
-			res_str = ftfy.fix_text(response.data.decode('utf-8')).replace('\\', '')
+			res_str = ftfy.fix_text(response.data.decode('utf-8')).replace('\\', '').replace(';\n', ';').replace('cheese\"', 'cheese')
 			try:
 				res = io.load_json(res_str)
 			except json.JSONDecodeError as e:
@@ -123,7 +147,7 @@ class OMIMAPI(APIClient, object):
 		else:
 			return {}
 
-	def call(self, max_trail=-1, interval=3, **kwargs):
+	def call(self, max_trail=1, interval=3, **kwargs):
 		args = copy.deepcopy(self._default_param[self.function])
 		args.update((k, v) for k, v in kwargs.items() if k in args)
 		trail = 0
@@ -140,4 +164,5 @@ class OMIMAPI(APIClient, object):
 
 
 if __name__ == '__main__':
+	print(omim_entry(['100100'], fields=['clinicalSynopsis'])[0]['clinicalSynopsis'])
 	print(omim_refs(['100100']))
