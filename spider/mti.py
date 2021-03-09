@@ -46,7 +46,7 @@ def annotext(text, ontos=[], cache_path='.cache', encoding='ascii'):
 	fs.write_file(text, inpath, encoding)
 	try:
 		df = pd.read_csv(StringIO(_fix_restext(GATEWAY.entry_point.get_result(os.path.abspath(inpath)))), sep='|', header=None)
-		res = [dict(id=r[2], loc=tuple(np.cumsum(list(map(int, r[8].split('^')[:2])))) if type(r[8]) is str and not r[8].isspace else None, name=r[5].lstrip('RtM via: ').split(';')[0] if type(r[5]) is str else '', text=r[1].lstrip('*') if type(r[1]) is str else '') for i, r in df.iterrows()]
+		res = [dict(id=r[2], loc=tuple(np.cumsum(list(map(int, r[8].split('^')[:2])))) if type(r[8]) is str and not r[8].isspace() else None, name=r[5].lstrip('RtM via: ').split(';')[0] if type(r[5]) is str else '', text=r[1].lstrip('*') if type(r[1]) is str else '') for i, r in df.iterrows()]
 	except Exception as e:
 		print(e)
 		if 'df' in locals():
@@ -69,7 +69,7 @@ def batch_annotexts(texts, ontos=[], cache_path='.cache', encoding='ascii'):
 	GATEWAY.entry_point.batch(os.path.abspath(inpath), os.path.abspath(outpath), 10)
 	res_strs = [_fix_restext(fs.read_file(os.path.join(outpath, '%i' % i))) for i in range(len(texts))]
 	dfs = [pd.read_csv(res, sep='|', header=None) if res else None for res in res_strs]
-	return [[dict(id=r[2], loc=tuple(np.cumsum(list(map(int, r[8].split('^')[:2])))) if type(r[8]) is str and not r[8].isspace else None, name=r[5].lstrip('RtM via: ').split(';')[0] if type(r[5]) is str else '', text=r[1].lstrip('*') if type(r[1]) is str else '') for i, r in df.iterrows()] if df else [] for df in dfs]
+	return [[dict(id=r[2], loc=tuple(np.cumsum(list(map(int, r[8].split('^')[:2])))) if type(r[8]) is str and not r[8].isspace() else None, name=r[5].lstrip('RtM via: ').split(';')[0] if type(r[5]) is str else '', text=r[1].lstrip('*') if type(r[1]) is str else '') for i, r in df.iterrows()] if df else [] for df in dfs]
 
 
 def _fix_restext(text):
