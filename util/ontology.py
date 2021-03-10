@@ -39,6 +39,7 @@ MESH_BTPRDC_MAP = {('meshv','broader'):'br', ('meshv','broaderConcept'):'bc', ('
 MESH_NTPRDC_MAP = {('meshv','narrowerConcept'):'nc'}
 
 DCTERMS = Namespace('http://purl.org/dc/terms/')
+RDF = Namespace('http://www.w3.org/1999/02/22-rdf-syntax-ns#')
 RDFS = Namespace('http://www.w3.org/2000/01/rdf-schema#')
 XSD = Namespace('http://www.w3.org/2001/XMLSchema#')
 OWL = Namespace('http://www.w3.org/2002/07/owl#')
@@ -206,9 +207,9 @@ def get_id(g, label, lang='', idns='', prdns=[], lbprds=RDFS_LABEL_MAP):
 	return [(str(row[0]), row[1].toPython()) for row in result] if idns.isspace() else [(str(row[0]).strip(idns), row[1].toPython()) for row in result if row[0].startswith(idns)]
 
 
-def get_label(g, id, lang='', idns='', prdns=[], lbprds=RDFS_LABEL_MAP):
+def get_label(g, id, lang='', idns=OBO, prdns=[], lbprds=RDFS_LABEL_MAP):
 	id, idns_str = replace_invalid_sparql_str(id, '_'), str(idns)
-	idns = Namespace(idns_str)
+	idns = idns if type(idns) is Namespace else Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
 	where_clause = ' UNION '.join(['''{%s %s ?o}''' % (id if idns_str.isspace() else 'idns:'+id, ':'.join(p)) for p in lbprds.keys()])
 	# The 'i' parameter in regex function means case insensitive
@@ -225,9 +226,9 @@ def get_label(g, id, lang='', idns='', prdns=[], lbprds=RDFS_LABEL_MAP):
 	return [row[0].toPython() for row in result]
 
 
-def get_ref(g, id, lang='', idns='', prdns=[], refprds=OBOWL_REF_MAP, revrel=False):
+def get_ref(g, id, lang='', idns=OBO, prdns=[], refprds=OBOWL_REF_MAP, revrel=False):
 	id, idns_str = replace_invalid_sparql_str(id, '_'), str(idns)
-	idns = Namespace(idns_str)
+	idns = idns if type(idns) is Namespace else Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
 	where_clause = ' UNION '.join(['''{?x %s "%s"}''' % (':'.join(p), id) if revrel else '''{%s %s ?x}''' % (id if idns_str.isspace() else 'idns:'+id, ':'.join(p)) for p in refprds.keys()])
 	# The 'i' parameter in regex function means case insensitive
@@ -244,9 +245,9 @@ def get_ref(g, id, lang='', idns='', prdns=[], refprds=OBOWL_REF_MAP, revrel=Fal
 	return [row[0].toPython().lstrip(idns_str) if revrel else row[0].toPython() for row in result]
 
 
-def get_prds(g, id_regex=None, lang='', idns=''):
+def get_prds(g, id_regex=None, lang='', idns=OBO):
 	idns_str = str(idns)
-	idns = Namespace(idns_str)
+	idns = idns if type(idns) is Namespace else Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
 	lang_clause = 'FILTER langMatches(lang(?label), "%s") .' % lang if lang and not lang.isspace() else ''
 	id_clause = 'FILTER regex(str(?id), "%s") .' % id_regex if id_regex and not id_regex.isspace() else ''
@@ -265,9 +266,9 @@ def get_prds(g, id_regex=None, lang='', idns=''):
 	return [(lambda x: (x[-1], Namespace(x[0]+'#')))(r.split('#')) if '#' in r else (lambda x: (x[-1], Namespace('/'.join(x[:-1])+'/')))(r.split('/')) for r in res]
 
 
-def get_objs(g, predicates, id_regex=None, retlb=True, lang='', idns='', prdns=[], limit=None, showpred=False, revrel=False, internal=False):
+def get_objs(g, predicates=RDFS_LABEL_MAP, id_regex=None, retlb=True, lang='', idns=OBO, prdns=[], limit=None, showpred=False, revrel=False, internal=False):
 	idns_str = str(idns)
-	idns = Namespace(idns_str)
+	idns = idns if type(idns) is Namespace else Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
 	predicates = RDFS_LABEL_MAP if len(predicates) == 0 else predicates
 	# pred_clause = 'BIND("{0}" AS ?predicate) .'
@@ -295,9 +296,9 @@ def get_objs(g, predicates, id_regex=None, retlb=True, lang='', idns='', prdns=[
 	return pd.DataFrame(res, columns=['id'] + (['label'] if retlb else []) + (['predicate'] if showpred else []) + ['object'] + (['object_label'] if internal else []))
 
 
-def get_annots(g, annotpred, id_prefix=None, lang='', idns='', limit=None):
+def get_annots(g, annotpred, id_prefix=None, lang='', idns=OBO, limit=None):
 	idns_str = str(idns)
-	idns = Namespace(idns_str)
+	idns = idns if type(idns) is Namespace else Namespace(idns_str)
 	prepareQuery = get_prepareq(g)
 	lang_clause = 'FILTER langMatches(lang(?label), "%s") .' % lang if lang and not lang.isspace() else ''
 	limit_clause = ('LIMIT %i' % limit) if limit and type(limit) is int and limit > 0 else ''
@@ -318,6 +319,32 @@ def get_annots(g, annotpred, id_prefix=None, lang='', idns='', limit=None):
 	res = [[re.sub(re.escape(idns), '', col.toPython()) for col in row] for row in result]
 	res = [row for row in res if id_prefix is None or id_prefix.isspace() or row[0].startswith(id_prefix)]
 	return pd.DataFrame(res, columns=['id', 'label', annotpred])
+
+
+def get_annot_prop(g, annot_prop, id_prefix=None, lang='', idns=OBO, limit=None):
+	idns_str = str(idns)
+	idns = idns if type(idns) is Namespace else Namespace(idns_str)
+	prepareQuery = get_prepareq(g)
+	prefix_clause = 'FILTER regex(str(?id), "%s") .' % id_prefix if id_prefix and not id_prefix.isspace() else ''
+	lang_clause = 'FILTER langMatches(lang(?label), "%s") .' % lang if lang and not lang.isspace() else ''
+	limit_clause = ('LIMIT %i' % limit) if limit and type(limit) is int and limit > 0 else ''
+	q_str = '''
+		SELECT DISTINCT ?id ?o ?label WHERE {
+			?annotid rdf:type owl:AnnotationProperty .
+		  	?annotid rdfs:label "%s" .
+		  	?id ?annotid ?o .
+		  	?id rdfs:label ?label .
+		  	%s
+			%s
+		}
+		ORDER BY ?id
+		%s
+		''' % (annot_prop, prefix_clause, lang_clause, limit_clause)
+	q = prepareQuery(q_str, initNs=dict([('obo', OBO), ('rdf', RDF), ('rdfs', RDFS), ('owl', OWL)]+([] if idns_str.isspace() else [('idns', idns)])))
+	result = g.query(q)
+	res = [[re.sub(re.escape(idns), '', col.toPython()) for col in row] for row in result]
+	res = [row for row in res if id_prefix is None or id_prefix.isspace() or row[0].startswith(id_prefix)]
+	return pd.DataFrame(res, columns=['id', annot_prop.replace(' ', '_'), 'label'])
 
 
 def get_id_tree(g, id_regex=None, idns='', prdns=[], revrel=False, retree=False, retsubtree=False):
