@@ -22,9 +22,11 @@ def inst_print(text):
 	print(text)
 	sys.stdout.flush()
 
-def write_json(data, fpath='data.json', code='ascii'):
+def write_json(data, fpath='data.json', code='ascii', **kwargs):
 	if (type(data) is not dict): data = dict(data=data)
-	fs.write_file(json.dumps(data, sort_keys=True, indent=4, separators=(',', ': ')), fpath=fpath, code=code)
+	kw_args = dict(sort_keys=True, indent=4, separators=(',', ': '))
+	kw_args.update(kwargs)
+	fs.write_file(json.dumps(data, **kw_args), fpath=fpath, code=code)
 
 
 def read_json(fpath):
