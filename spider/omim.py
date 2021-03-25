@@ -18,9 +18,9 @@ import ftfy
 
 # from ..util import ontology
 # from bionlp.util import ontology
-# from ..util import io
+# from ..util import fs, io
 # import xmlextrc
-from bionlp.util import io
+from bionlp.util import fs, io
 from bionlp.spider import xmlextrc
 
 
@@ -33,19 +33,22 @@ API_KEY = 'btpdnKMaTTaq87fvYPgl9A'
 SC=';;'
 
 
-def omim_entry(omim_ids, fields=[], text_fields=[], interval=0):
+def omim_entry(omim_ids, fields=[], text_fields=[], interval=0, cache_path=OMIM_PATH, skip_cache=False):
+	fs.mkdir(cache_path)
 	client = OMIMAPI(function='entry')
 	unique_omim_ids = set(omim_ids)
 	print('Querying entries for OMIM ids: %s' % ', '.join(unique_omim_ids))
 	sys.stdout.flush()
 	if len(text_fields) > 0 and 'text' in fields: fileds.remove('text')
 	include_params = ','.join(fields+[','.join([':'.join(['text', x]) for x in text_fields])])
-	if interval == 0:
-		res = [client.call(mimNumber=omimid, include=include_params) for omimid in omim_ids]
-	else:
-		res = []
-		for omimid in omim_ids:
+	res = []
+	for omimid in omim_ids:
+		cachef = os.path.join(cache_path, 'entry%s%s_%s.json' % (('_'+'+'.join(fields)) if fields else '', ('_'+'+'.join(text_fields)) if text_fields else '', omimid))
+		if (os.path.exists(cachef) and not skip_cache):
+			res.append(io.read_json(cachef))
+		else:
 			res.append(client.call(mimNumber=omimid, include=include_params))
+			io.write_json(res[-1], cachef)
 			time.sleep(interval)
 	res_map = dict(zip(unique_omim_ids, [r['omim']['entryList'][0]['entry'] if 'omim' in r else r for r in res]))
 	return [res_map[omimid] for omimid in omim_ids]
