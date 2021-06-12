@@ -30,6 +30,12 @@ def write_json(data, fpath='data.json', code='ascii', **kwargs):
 
 
 def read_json(fpath):
+	with open(fpath) as fd:
+		res = json.load(fd)
+	return res
+
+
+def read_json_old(fpath):
 	return parse_json('\n'.join(fs.read_file(fpath)))
 
 
@@ -141,7 +147,11 @@ class JsonIterable(object):
 def write_obj(obj, fpath='obj'):
 	fs.mkdir(os.path.dirname(fpath))
 	with open(os.path.splitext(fpath)[0] + '.pkl', 'wb') as f:
-		pickle.dump(obj, f)
+		try:
+			pickle.dump(obj, f)
+		except AttributeError as e:
+			import dill
+			dill.dump(obj, f)
 
 
 def read_obj(fpath):
@@ -293,7 +303,7 @@ class DataFrameIterable(object):
 			for sub_df in obj_reader: yield sub_df
 
 
-def write_yaml(data, fpath, append=False, dfs=False):
+def write_yaml(data, fpath='data.yaml', append=False, dfs=False):
 #	fs.mkdir(os.path.dirname(fpath))
 	fpath = os.path.splitext(fpath)[0] + '.yaml'
 	with open(fpath, 'a' if append else 'w') as f:
@@ -304,7 +314,7 @@ def read_yaml(fpath):
 	fpath = os.path.splitext(fpath)[0] + '.yaml'
 	if (os.path.exists(fpath)):
 		with open(fpath, 'r') as f:
-			return yaml.load(f)
+			return yaml.safe_load(f)
 	else:
 		print(('File %s does not exist!' % fpath))
 

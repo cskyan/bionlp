@@ -121,3 +121,31 @@ def read_firstlast_line(fpath):
 	            break
 	        offset *= 2
 	return first.decode(), last.decode()
+
+def get_import_path(module):
+	import inspect
+	try:
+		module_path, prefix = os.path.abspath(inspect.getfile(module)), ''
+	except TypeError as e:
+		cls_str = str(type(module))
+		return (cls_str[len('<class '):] if cls_str.startswith('<class ') else cls_str).strip('\'>')
+	for x in sys.path:
+		if x and module_path.startswith(x) and len(x) > len(prefix):
+			prefix = x
+	module_rpath = os.path.normpath(module_path[len(prefix):]).lstrip(os.sep).rstrip('.py')
+	return '.'.join(module_rpath.split(os.sep))
+
+
+def get_import_path_obj(obj, keep_obj=False):
+	from types import ModuleType
+	import_path = get_import_path(obj)
+	if type(obj) is type or callable(obj):
+		return import_path, obj.__name__
+	elif isinstance(obj, ModuleType):
+		return import_path, None
+	else:
+		if keep_obj:
+			return import_path, obj
+		else:
+			import_paths = import_path.split('.')
+			return '.'.join(import_paths[:-1]), import_paths[-1]
