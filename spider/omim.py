@@ -39,7 +39,7 @@ def omim_entry(omim_ids, fields=[], text_fields=[], interval=0, cache_path=OMIM_
 	unique_omim_ids = set(omim_ids)
 	print('Querying entries for OMIM ids: %s' % ', '.join(unique_omim_ids))
 	sys.stdout.flush()
-	if len(text_fields) > 0 and 'text' in fields: fileds.remove('text')
+	if len(text_fields) > 0 and 'text' in fields: fields.remove('text')
 	include_params = ','.join(fields+[','.join([':'.join(['text', x]) for x in text_fields])])
 	res = []
 	for omimid in omim_ids:
