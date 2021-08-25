@@ -27,9 +27,10 @@ SC='\n'
 
 
 class PubTatorAPI():
-	BASE_URL = 'https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful/tmTool.cgi/'
-	_type_url = {'chemical':'Chemical', 'disease':'Disease', 'gene':'Gene', 'mutation':'Mutation', 'species':'Species', 'all':'BioConcept'}
-	_type_trg = {'chemical':'tmChem', 'disease':'DNorm', 'gene':'GNormPlus', 'mutation':'tmVar', 'species':'GNormPlus'}
+	BASE_URL = 'https://www.ncbi.nlm.nih.gov/research/pubtator-api/'
+	_type_url = set(['chemical', 'disease', 'gene', 'mutation', 'species', 'all'])
+	# _type_trg = {'chemical':'tmChem', 'disease':'DNorm', 'gene':'GNormPlus', 'mutation':'tmVar', 'species':'GNormPlus'}
+	_format_type = {'bioc':'biocxml', 'pubtator':'pubtator', 'json':'biocjson'}
 	_format_ext = {'bioc':'xml', 'pubtator':'txt', 'json':'json'}
 	def __init__(self, cache_dir=PUBTATOR_PATH):
 		self.format = None
@@ -47,23 +48,20 @@ class PubTatorAPI():
 		self.format = None
 		return res
 
-	def get_concepts_pmid(self, type, pmid, fmt='JSON'):
-		type = type.lower()
-		# if (type == 'all'):
-			# res_list = [self.get_concepts_pmid(type=tp, pmid=pmid, fmt='JSON') for tp in PubTatorAPI._type_url.keys()]
-			# return [func.update_dict(copy.deepcopy(prgrph[0]), {u'denotations':func.flatten_list([res['denotations'] for res in prgrph])}) for prgrph in zip(*res_list)]
-		self.format = fmt if fmt in ('PubTator', 'BioC', 'JSON') else None
-		self._check_type(type)
-		fs.mkdir(os.path.join(self.cache_dir, type))
-		cache_path = os.path.join(self.cache_dir, type, '%s.%s' % (pmid, PubTatorAPI._format_ext[fmt.lower()]))
+	def get_concepts_pmid(self, ctype, pmid, fmt='JSON'):
+		ctype = ctype.lower()
+		self.format = PubTatorAPI._format_ext[fmt.lower()] if fmt.lower() in ('pubtator', 'bioc', 'json') else None
+		self._check_type(ctype)
+		fs.mkdir(os.path.join(self.cache_dir, ctype))
+		cache_path = os.path.join(self.cache_dir, ctype, '%s.%s' % (pmid, PubTatorAPI._format_ext[fmt.lower()]))
 		if (os.path.exists(cache_path)):
 			if fmt == 'JSON':
-				res = io.read_json(cache_path)['data']
+				res = io.read_json(cache_path)
 			else:
 				res = '\n'.join(fs.read_file(cache_path, code='utf-8'))
 			return res
 		else:
-			res = requests.get(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, '%s/%s/%s' % (PubTatorAPI._type_url[type], pmid, fmt)))
+			res = requests.get(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, 'publications/export/%s?pmids=%s&concepts=%s' % (PubTatorAPI._format_type[fmt.lower()], pmid, ctype)))
 			if fmt == 'JSON':
 				io.write_json(res.json() if res.text else [], cache_path, code='utf-8')
 			else:
@@ -72,10 +70,10 @@ class PubTatorAPI():
 
 	def get_concepts_rawtxt(self, ctype, text, sleep_time=10, timeout=600):
 		ctype = ctype.lower()
-		if (ctype == 'all'):
-			res_list = [self.get_concepts_rawtxt(ctype=tp, text=text, sleep_time=sleep_time, timeout=timeout) for tp in PubTatorAPI._type_trg.keys()]
-			denotations = func.flatten_list([res['denotations'] for res in res_list])
-			return func.update_dict(copy.deepcopy(res_list[0]), {u'denotations':denotations})
+		# if (ctype == 'all'):
+		# 	res_list = [self.get_concepts_rawtxt(ctype=tp, text=text, sleep_time=sleep_time, timeout=timeout) for tp in PubTatorAPI._type_trg.keys()]
+		# 	denotations = func.flatten_list([res['denotations'] for res in res_list])
+		# 	return func.update_dict(copy.deepcopy(res_list[0]), {u'denotations':denotations})
 		self._check_type(ctype)
 		fs.mkdir(os.path.join(self.cache_dir, ctype))
 		cache_path = os.path.join(self.cache_dir, ctype, 'rawtxt.pkl')
@@ -88,10 +86,10 @@ class PubTatorAPI():
 			except Exception as e:
 				print(e)
 		data = '{"sourcedb":"PubMed","sourceid":"1000001","text":"%s"}' % text
-		sess_id = requests.post(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, '%s/Submit' % PubTatorAPI._type_trg[ctype]), data=data).text
+		sess_id = requests.post(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, 'annotations/annotate/submit/%s/Submit' % ctype), data=data).text
 		wait_time, res = 0, {}
 		while (not res and wait_time < timeout):
-			res = requests.get(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, '%s/Receive' % sess_id))
+			res = requests.get(url=urllib.parse.urljoin(PubTatorAPI.BASE_URL, 'annotations/annotate/retrieve/%s' % sess_id))
 			res = {} if not res.ok or 'The Result is not ready' in res.text else res
 			time.sleep(sleep_time)
 			wait_time += sleep_time
