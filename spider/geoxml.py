@@ -46,6 +46,7 @@ class GSEBuilder():
 		self.pmid = ''
 		self.title = ''
 		self.summary = ''
+		self.keywords = []
 
 	def start(self, tag, attrib):
 		self._tag = tag.split('}')[1] if '}' in tag else tag
@@ -78,7 +79,6 @@ class GSEBuilder():
 		if (self._tag == 'Title'):
 			self.title = data
 		if (self._tag == 'Summary'):
-			self.keywords = []
 			paragraphs = data.split('\n')
 			i = len(paragraphs) - 1
 			for i in range(len(paragraphs) - 1, 0, -1):
@@ -359,7 +359,7 @@ def fetch_geo(accessions, type='self', view='full', fmt='xml', saved_path=GEO_PA
 				print('Failed to fetch the GEO file: %s' % acc)
 				continue
 			count += 1
-			fs.write_file(res, tgt_file)
+			fs.write_file(res.decode("utf-8"), tgt_file)
 		yield res
 	print("Number of obtained GEO documents: %i\n" % count)
 
@@ -370,7 +370,7 @@ def parse_geo(geo_fpath, view='brief', type='gse', fmt='xml'):
 	geo_str = fs.read_file(geo_fpath)
 	parser = xmlextrc.get_parser(builder)
 	try:
-		parser.feed(nlp.clean_text('\n'.join(geo_str), encoding='utf-8', replacement=None))
+		parser.feed('\n'.join(geo_str))
 	except Exception as err:
 		print('Can not parse the file: %s' % geo_fpath)
 		raise err

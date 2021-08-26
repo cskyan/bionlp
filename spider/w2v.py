@@ -41,13 +41,13 @@ class GensimW2VWrapper(object):
 			self.model.save(mdl_path)
 
 	def get_vocab(self):
-		word2idx = dict([(k, v.index) for k, v in self.model.vocab.items()])
+		word2idx = dict([(k, v.index) for k, v in self.model.wv.vocab.items()])
 		idx2word = dict([(v, k) for k, v in word2idx.items()])
 		return word2idx, idx2word
 
 	def word2idx(self, word, inexistence=-1):
 		try:
-			idx = self.model.vocab[word.lower()].index
+			idx = self.model.wv.vocab[word.lower()].index
 		except KeyError as e:
 			print('\'%s\' is not in the vocabulary!' % nlp.clean_txt(word))
 			return inexistence
@@ -55,13 +55,13 @@ class GensimW2VWrapper(object):
 			return idx
 
 	def get_weights(self):
-		return self.model.syn0
+		return self.model.wv.vectors
 
 	def get_vocab_size(self):
-		return self.model.syn0.shape[0]
+		return self.model.wv.vectors.shape[0]
 
 	def get_dim(self):
-		return self.model.syn0.shape[1]
+		return self.model.wv.vectors.shape[1]
 
 	def get_embedding_layer(self, type='keras', **kwargs):
 		weights = self.get_weights()
