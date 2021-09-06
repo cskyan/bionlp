@@ -33,24 +33,39 @@ API_KEY = 'btpdnKMaTTaq87fvYPgl9A'
 SC=';;'
 
 
-def omim_entry(omim_ids, fields=[], text_fields=[], interval=0, cache_path=OMIM_PATH, skip_cache=False):
+def omim_entry(omim_ids, fields=[], text_fields=[], batch=False, interval=0, cache_path=OMIM_PATH, skip_cache=False):
 	fs.mkdir(cache_path)
 	client = OMIMAPI(function='entry')
-	unique_omim_ids = set(omim_ids)
+	unique_omim_ids = sorted(set(omim_ids))
 	print('Querying entries for OMIM ids: %s' % ', '.join(unique_omim_ids))
 	sys.stdout.flush()
 	if len(text_fields) > 0 and 'text' in fields: fields.remove('text')
 	include_params = ','.join(fields+[','.join([':'.join(['text', x]) for x in text_fields])])
-	res = []
-	for omimid in omim_ids:
-		cachef = os.path.join(cache_path, 'entry%s%s_%s.json' % (('_'+'+'.join(fields)) if fields else '', ('_'+'+'.join(text_fields)) if text_fields else '', omimid))
+	fields_name = ('_'+'+'.join(fields)) if fields else ''
+	text_fields_name = ('_'+'+'.join(text_fields)) if text_fields else ''
+	res, todos = [], []
+	for omimid in unique_omim_ids:
+		cachef = os.path.join(cache_path, 'entry%s%s_%s.json' % (fields_name, text_fields_name, omimid))
 		if (os.path.exists(cachef) and not skip_cache):
 			res.append(io.read_json(cachef))
 		else:
-			res.append(client.call(mimNumber=omimid, include=include_params))
-			io.write_json(res[-1], cachef)
-			time.sleep(interval)
+			if batch:
+				todos.append(omimid)
+				res.append({})
+			else:
+				res.append(client.call(mimNumber=omimid, include=include_params))
+				io.write_json(res[-1], cachef)
+				time.sleep(interval)
 	res_map = dict(zip(unique_omim_ids, [r['omim']['entryList'][0]['entry'] if 'omim' in r else r for r in res]))
+	if len(todos) > 0:
+		batch_res = client.call(mimNumber=','.join(todos), include=include_params)
+		entries = batch_res['omim']['entryList']
+		batch_res['omim']['entryList'] = []
+		for entry in entries:
+			sub_res = copy.deepcopy(batch_res)
+			sub_res['omim']['entryList'].append(entry)
+			io.write_json(sub_res, os.path.join(cache_path, 'entry%s%s_%s.json' % (fields_name, text_fields_name, entry['entry']['mimNumber'])))
+			res_map[entry['entry']['mimNumber']] = entry
 	return [res_map[omimid] for omimid in omim_ids]
 
 
