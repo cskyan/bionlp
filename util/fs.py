@@ -54,11 +54,9 @@ def write_file(content, fpath, code='ascii'):
 		if (code.lower() == 'ascii'):
 			with open(fpath, mode='w') as fd:
 				fd.write(content)
-				fd.close()
 		else:
 			with codecs.open(fpath, mode='w', encoding=code, errors='ignore') as fd:
 				fd.write(content)
-				fd.close()
 	except Exception as e:
 		print(e)
 		print(('Can not write to the file \'%s\'!' % fpath))

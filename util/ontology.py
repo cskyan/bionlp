@@ -18,11 +18,12 @@ import scipy as sp
 from scipy.sparse import coo_matrix
 import pandas as pd
 
+import ftfy
+
 from rdflib import Graph, Namespace
 from rdflib.plugins.sparql import prepareQuery as rprepareq
 
 from ..spider.sparql import SPARQL
-from .. import nlp
 from . import fs, func
 
 
@@ -58,17 +59,17 @@ opts, args = {}, []
 
 
 def replace_invalid_sparql_str(text, replacement=''):
-	return re.sub(r'^\+|[?|$|!|#]', replacement, nlp.clean_txt(str(text))).strip()
+	return re.sub(r'^\+|[?|$|!|#]', replacement, ftfy.fix_text(str(text))).strip()
 
 
 def replace_invalid_str(text, replacement=''):
-	return re.sub(r'^\+|[\(|\)|\[|\]|?|$|!|#]', replacement, nlp.clean_txt(str(text))).strip()
+	return re.sub(r'^\+|[\(|\)|\[|\]|?|$|!|#]', replacement, ftfy.fix_text(str(text))).strip()
 
 
 def clean_result(db):
 	if (db == 'dgnet'):
 		def clean_dgnet(text, replacement=''):
-			return re.sub(r'\[.*\]', replacement, nlp.clean_txt(str(text))).strip()
+			return re.sub(r'\[.*\]', replacement, ftfy.fix_text(str(text))).strip()
 		return clean_dgnet
 	else:
 		return None
